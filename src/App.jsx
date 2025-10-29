@@ -76,6 +76,11 @@ const HorseAnalysisApp = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [showExcludeModal, setShowExcludeModal] = useState(false);
   const [excludedHorses, setExcludedHorses] = useState({});
+  
+  // 🆕 EXP係数管理
+  const [expCoefficient, setExpCoefficient] = useState(0.1);
+  const [showExpModal, setShowExpModal] = useState(false);
+  const [tempExpCoefficient, setTempExpCoefficient] = useState(0.1);
 
   const factors = [
     { name: '能力値', weight: 15, key: 'タイム指数' },
@@ -207,6 +212,7 @@ const HorseAnalysisApp = () => {
       odds: {},
       memo: '',
       excluded: {},
+      expCoefficient: 0.1, // 🆕 初期値0.1
       createdBy: userId,
       createdTime: new Date().toISOString()
     };
@@ -298,6 +304,21 @@ const HorseAnalysisApp = () => {
     setShowExcludeModal(false);
   };
 
+  // 🆕 EXP係数を保存
+  const saveExpCoefficient = () => {
+    setExpCoefficient(tempExpCoefficient);
+    const raceRef = ref(database, `races/${currentRace.firebaseId}`);
+    set(raceRef, {
+      ...currentRace,
+      expCoefficient: tempExpCoefficient
+    });
+    setCurrentRace({
+      ...currentRace,
+      expCoefficient: tempExpCoefficient
+    });
+    setShowExpModal(false);
+  };
+
   const calculateWinRate = (horses, courseKey = null) => {
     if (!horses || horses.length === 0) return [];
 
@@ -334,9 +355,10 @@ const HorseAnalysisApp = () => {
     if (horsesWithScores.length === 0) return [];
 
     const maxScore = Math.max(...horsesWithScores.map(h => h.totalScore));
+    // 🔧 EXP係数を動的に使用
     const exponentials = horsesWithScores.map(horse => ({
       ...horse,
-      exp: Math.exp((horse.totalScore - maxScore) * 0.1)
+      exp: Math.exp((horse.totalScore - maxScore) * expCoefficient)
     }));
 
     const sumExp = exponentials.reduce((sum, h) => sum + h.exp, 0);
@@ -552,6 +574,7 @@ const HorseAnalysisApp = () => {
                         setMemo(race.memo || '');
                         setOddsInput(race.odds || {});
                         setExcludedHorses(race.excluded || {});
+                        setExpCoefficient(race.expCoefficient || 0.1); // 🆕 EXP係数を読み込む
                       }}
                     >
                       <h3 className="font-semibold text-gray-800">{race.name}</h3>
@@ -900,6 +923,8 @@ const HorseAnalysisApp = () => {
           <p className="text-sm text-gray-600 mt-1">
             {currentRace.createdAt} · {currentRace.horses.length}頭
             {raceSelectedCourse && ` · ${raceSelectedCourse}`}
+            {/* 🆕 EXP係数表示 */}
+            {` · EXP係数: ${expCoefficient}`}
           </p>
         </div>
         <button
@@ -951,6 +976,17 @@ const HorseAnalysisApp = () => {
                 className="px-4 py-2 bg-purple-500 text-white rounded-md hover:bg-purple-600 font-semibold text-sm"
               >
                 コース設定変更
+              </button>
+            )}
+            {isAdmin && (
+              <button
+                onClick={() => {
+                  setTempExpCoefficient(expCoefficient);
+                  setShowExpModal(true);
+                }}
+                className="px-4 py-2 bg-indigo-500 text-white rounded-md hover:bg-indigo-600 font-semibold text-sm"
+              >
+                EXP設定
               </button>
             )}
             {isAdmin && (
@@ -1025,6 +1061,33 @@ const HorseAnalysisApp = () => {
               </div>
             );
           })}
+          
+          {/* 🆕 除外された馬を表示 */}
+          {Object.keys(excludedHorses).length > 0 && (
+            <div className="mt-4 pt-4 border-t border-gray-300">
+              <p className="text-sm text-gray-600 mb-2 font-semibold">除外対象：</p>
+              <div className="space-y-2">
+                {currentRace.horses
+                  .filter(horse => excludedHorses[horse.horseNum])
+                  .sort((a, b) => a.horseNum - b.horseNum)
+                  .map((horse) => (
+                    <div
+                      key={horse.horseNum}
+                      className="p-3 bg-gray-300 rounded-lg border-2 border-gray-400 opacity-60"
+                    >
+                      <div className="flex items-center gap-4">
+                        <div className="text-lg font-bold text-gray-700">
+                          {horse.horseNum}. {horse.name}
+                        </div>
+                        <div className="text-sm font-semibold text-gray-700">
+                          【除外】
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
@@ -1088,6 +1151,54 @@ const HorseAnalysisApp = () => {
             >
               キャンセル
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* 🆕 EXP係数設定モーダル */}
+      {showExpModal && isAdmin && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg p-6 max-w-md w-full shadow-lg">
+            <h3 className="text-lg font-semibold mb-4 text-gray-800">EXP係数を調整</h3>
+            
+            <div className="mb-6">
+              <label className="block text-sm font-medium text-gray-600 mb-3">
+                係数: {tempExpCoefficient.toFixed(2)}
+              </label>
+              <input
+                type="range"
+                min="0.01"
+                max="0.5"
+                step="0.01"
+                value={tempExpCoefficient}
+                onChange={(e) => setTempExpCoefficient(parseFloat(e.target.value))}
+                className="w-full"
+              />
+              <div className="flex justify-between text-xs text-gray-500 mt-2">
+                <span>0.01（最も均等）</span>
+                <span>0.5（最も敏感）</span>
+              </div>
+            </div>
+
+            <div className="mb-4 p-3 bg-blue-100 rounded text-sm text-blue-800">
+              <p>低い値: 各馬の勝率がより均等</p>
+              <p>高い値: トップ馬との差が顕著</p>
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                onClick={saveExpCoefficient}
+                className="flex-1 px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 font-semibold text-sm"
+              >
+                保存
+              </button>
+              <button
+                onClick={() => setShowExpModal(false)}
+                className="flex-1 px-4 py-2 bg-gray-400 text-white rounded-md hover:bg-gray-500 text-sm"
+              >
+                キャンセル
+              </button>
+            </div>
           </div>
         </div>
       )}
