@@ -74,6 +74,8 @@ const HorseAnalysisApp = () => {
   const [raceToDelete, setRaceToDelete] = useState(null);
   const [userId, setUserId] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [showExcludeModal, setShowExcludeModal] = useState(false);
+  const [excludedHorses, setExcludedHorses] = useState({});
 
   const factors = [
     { name: '能力値', weight: 15, key: 'タイム指数' },
@@ -204,6 +206,7 @@ const HorseAnalysisApp = () => {
       result: null,
       odds: {},
       memo: '',
+      excluded: {},
       createdBy: userId,
       createdTime: new Date().toISOString()
     };
@@ -272,6 +275,29 @@ const HorseAnalysisApp = () => {
     setRaceToDelete(null);
   };
 
+  const toggleExcludeHorse = (horseNum) => {
+    const newExcluded = { ...excludedHorses };
+    if (newExcluded[horseNum]) {
+      delete newExcluded[horseNum];
+    } else {
+      newExcluded[horseNum] = true;
+    }
+    setExcludedHorses(newExcluded);
+  };
+
+  const saveExcludeSettings = () => {
+    const raceRef = ref(database, `races/${currentRace.firebaseId}`);
+    set(raceRef, {
+      ...currentRace,
+      excluded: excludedHorses
+    });
+    setCurrentRace({
+      ...currentRace,
+      excluded: excludedHorses
+    });
+    setShowExcludeModal(false);
+  };
+
   const calculateWinRate = (horses, courseKey = null) => {
     if (!horses || horses.length === 0) return [];
 
@@ -288,7 +314,10 @@ const HorseAnalysisApp = () => {
         '調教': 15
       };
 
-    const horsesWithScores = horses.map(horse => {
+    // 除外されていない馬のみを計算対象にする
+    const activeHorses = horses.filter(horse => !excludedHorses[horse.horseNum]);
+
+    const horsesWithScores = activeHorses.map(horse => {
       let totalScore = 0;
       Object.keys(weights).forEach(factor => {
         const factorKey = factor === '能力値' ? 'タイム指数' : factor;
@@ -301,6 +330,8 @@ const HorseAnalysisApp = () => {
         totalScore
       };
     });
+
+    if (horsesWithScores.length === 0) return [];
 
     const maxScore = Math.max(...horsesWithScores.map(h => h.totalScore));
     const exponentials = horsesWithScores.map(horse => ({
@@ -350,6 +381,11 @@ const HorseAnalysisApp = () => {
 
     const resultsWithRate = calculateWinRate(currentRace.horses, raceSelectedCourse);
     const top1 = resultsWithRate[0];
+
+    if (!top1) {
+      alert('評価対象の馬がありません');
+      return;
+    }
 
     const ranking = resultRanking.split(/[\s\-,]/);
     
@@ -515,6 +551,7 @@ const HorseAnalysisApp = () => {
                         setRaceSelectedCourse(race.courseKey);
                         setMemo(race.memo || '');
                         setOddsInput(race.odds || {});
+                        setExcludedHorses(race.excluded || {});
                       }}
                     >
                       <h3 className="font-semibold text-gray-800">{race.name}</h3>
@@ -916,6 +953,14 @@ const HorseAnalysisApp = () => {
                 コース設定変更
               </button>
             )}
+            {isAdmin && (
+              <button
+                onClick={() => setShowExcludeModal(true)}
+                className="px-4 py-2 bg-red-500 text-white rounded-md hover:bg-red-600 font-semibold text-sm"
+              >
+                馬を除外
+              </button>
+            )}
             <button
               onClick={() => {
                 setOddsInput(currentRace.odds || {});
@@ -1043,6 +1088,45 @@ const HorseAnalysisApp = () => {
             >
               キャンセル
             </button>
+          </div>
+        </div>
+      )}
+
+      {showExcludeModal && isAdmin && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg p-6 max-w-md w-full shadow-lg max-h-96 overflow-y-auto">
+            <h3 className="text-lg font-semibold mb-4 text-gray-800">馬を除外（出走取り消しなど）</h3>
+            
+            <div className="space-y-2 mb-6">
+              {currentRace.horses.sort((a, b) => a.horseNum - b.horseNum).map((horse) => (
+                <label key={horse.horseNum} className="flex items-center gap-3 p-2 hover:bg-gray-50 rounded cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={!!excludedHorses[horse.horseNum]}
+                    onChange={() => toggleExcludeHorse(horse.horseNum)}
+                    className="w-4 h-4"
+                  />
+                  <span className="text-sm text-gray-700">
+                    {horse.horseNum}. {horse.name}
+                  </span>
+                </label>
+              ))}
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                onClick={saveExcludeSettings}
+                className="flex-1 px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 font-semibold text-sm"
+              >
+                保存
+              </button>
+              <button
+                onClick={() => setShowExcludeModal(false)}
+                className="flex-1 px-4 py-2 bg-gray-400 text-white rounded-md hover:bg-gray-500 text-sm"
+              >
+                キャンセル
+              </button>
+            </div>
           </div>
         </div>
       )}
