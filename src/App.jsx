@@ -313,6 +313,25 @@ const HorseAnalysisApp = () => {
     setShowExpModal(false);
   };
 
+  // 全体期待値の計算（ランク付け用）
+  const calculateAllExpectationValues = () => {
+    const allValues = [];
+    races.forEach(race => {
+      if (race.odds && Object.keys(race.odds).length > 0) {
+        race.horses.forEach(horse => {
+          const odds = race.odds[horse.horseNum] || 0;
+          if (odds > 0) {
+            // 簡易的にデフォルト勝率を使用（実際はレースごとの勝率を使うべき）
+            const winRate = 10; // ここは後で改善可能
+            const expectation = odds * winRate;
+            allValues.push({ expectation, raceId: race.firebaseId, horseNum: horse.horseNum });
+          }
+        });
+      }
+    });
+    return allValues.sort((a, b) => b.expectation - a.expectation);
+  };
+
   const calculateWinRate = (horses, courseKey = null) => {
     if (!horses || horses.length === 0) return [];
 
@@ -599,6 +618,23 @@ const HorseAnalysisApp = () => {
                           </button>
                         )}
                       </div>
+                      {/* 期待値馬のいるレースを表示 */}
+                      {race.odds && Object.keys(race.odds).length > 0 && (
+                        <div className="text-xl mb-2">
+                          {race.horses.some(horse => {
+                            const odds = race.odds[horse.horseNum] || 0;
+                            // 簡易的な勝率計算（ここでは10%と仮定）
+                            const value = odds * 10;
+                            return value >= 220;
+                          }) ? '💎超期待値馬あり！' : 
+                          race.horses.some(horse => {
+                            const odds = race.odds[horse.horseNum] || 0;
+                            const value = odds * 10;
+                            return value >= 150 && value < 220;
+                          }) ? '✨期待値馬あり！' : ''}
+                        </div>
+                      )}
+                      
                       {race.result && (
                         <div className="flex items-center gap-2 flex-wrap">
                           <span className="text-xs md:text-sm font-bold text-gray-700">結果: {race.result.ranking}</span>
@@ -1039,13 +1075,18 @@ const HorseAnalysisApp = () => {
             {resultsWithRate.map((horse, idx) => {
               const odds = oddsInput[horse.horseNum] || 0;
               const value = odds * horse.winRate;
-              const isGoodValue = horse.winRate >= 10 && value >= 150;
+              
+              // 期待値の判定
+              const isSuperExpectation = value >= 220; // 超期待値馬
+              const isGoodExpectation = horse.winRate >= 10 && value >= 150 && value < 220; // 期待値馬
               
               return (
                 <div
                   key={horse.horseNum}
                   className={`p-4 rounded-2xl border-2 transition ${
-                    isGoodValue && odds > 0 
+                    isSuperExpectation
+                      ? 'bg-gradient-to-r from-yellow-300 to-orange-300 border-yellow-500 shadow-lg' 
+                      : isGoodExpectation && odds > 0
                       ? 'bg-yellow-200 border-yellow-400' 
                       : idx === 0 ? 'bg-gradient-to-r from-pink-200 to-purple-200 border-pink-400' : 'bg-white border-gray-200'
                   }`}
@@ -1055,13 +1096,13 @@ const HorseAnalysisApp = () => {
                       <div className="text-3xl font-black text-gray-700 min-w-16 text-center">
                         {idx + 1}位
                       </div>
-                      <div>
+                      <div className="flex-1">
                         <div className="text-lg font-bold text-gray-800">
                           {horse.horseNum}. {horse.name}
                         </div>
                         {odds > 0 && (
-                          <div className="text-xs text-gray-600 mt-1 font-bold">
-                            オッズ {odds.toFixed(1)} × 勝率 {horse.winRate.toFixed(1)}% = {value.toFixed(0)}
+                          <div className="text-xs text-gray-700 mt-1 font-bold">
+                            オッズ{odds.toFixed(1)}×勝{horse.winRate.toFixed(1)}％＝{value.toFixed(0)}
                           </div>
                         )}
                       </div>
@@ -1071,8 +1112,10 @@ const HorseAnalysisApp = () => {
                         {horse.winRate.toFixed(1)}%
                       </div>
                       {odds > 0 && (
-                        <div className={`text-sm font-bold mt-1 ${isGoodValue ? 'text-yellow-700' : 'text-gray-600'}`}>
-                          {isGoodValue ? '💎期待値馬！' : ''}
+                        <div className={`text-sm font-bold mt-1 ${
+                          isSuperExpectation ? 'text-orange-700' : isGoodExpectation ? 'text-yellow-700' : 'text-gray-600'
+                        }`}>
+                          {isSuperExpectation ? '💎超期待値馬！' : isGoodExpectation ? '✨期待値馬！' : ''}
                         </div>
                       )}
                     </div>
