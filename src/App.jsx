@@ -81,6 +81,13 @@ const HorseAnalysisApp = () => {
   const [showExpModal, setShowExpModal] = useState(false);
   const [tempExpCoefficient, setTempExpCoefficient] = useState(0.1);
 
+  const [showBettingModal, setShowBettingModal] = useState(false);
+  const [bettingBudget, setBettingBudget] = useState(1000);
+  const [bettingType, setBettingType] = useState('accuracy'); // 'accuracy' or 'value'
+  const [generatedBets, setGeneratedBets] = useState([]);
+
+  const [statsType, setStatsType] = useState('winrate'); // 'winrate', 'expectation', 'ai'
+
   const factors = [
     { name: '能力値', weight: 15, key: 'タイム指数' },
     { name: 'コース・距離適性', weight: 18, key: 'コース・距離適性' },
@@ -361,8 +368,141 @@ const HorseAnalysisApp = () => {
     })).sort((a, b) => b.winRate - a.winRate);
   };
 
-  const calculateStats = (courseKey = null) => {
-    let recordedRaces = races.filter(r => r.result);
+  // レース内の期待値ランキングを計算
+  const calculateExpectationRanking = (horses, odds) => {
+    if (!odds || Object.keys(odds).length === 0) return {};
+    
+    const expectations = horses
+      .map(horse => {
+        const horseOdds = odds[horse.horseNum] || 0;
+        const value = horseOdds * horse.winRate;
+        return { horseNum: horse.horseNum, value };
+      })
+      .filter(e => e.value > 0)
+      .sort((a, b) => b.value - a.value);
+    
+    const ranking = {};
+    expectations.forEach((e, idx) => {
+      ranking[e.horseNum] = idx + 1;
+    });
+    
+    return ranking;
+  };
+
+  // AIおすすめ馬を計算
+  const calculateAIRecommendation = (horses) => {
+    const candidates = horses.filter(horse => {
+      const odds = oddsInput[horse.horseNum] || 0;
+      const value = odds * horse.winRate;
+      return value >= 100 && horse.winRate >= 10;
+    });
+    
+    if (candidates.length === 0) return null;
+    
+    return candidates.sort((a, b) => b.winRate - a.winRate)[0];
+  };
+
+  // 買い目自動生成
+  const generateBettingRecommendations = () => {
+    const budget = bettingBudget;
+    const bets = [];
+
+    if (bettingType === 'accuracy') {
+      // 的中率特化型：勝率1位馬から予算に応じた買い目生成
+      const top3 = resultsWithRate.slice(0, 3);
+      
+      // 単勝・複勝
+      if (budget >= 200) {
+        bets.push({
+          type: '単勝',
+          horses: [`${top3[0].horseNum}. ${top3[0].name}`],
+          amount: Math.floor(budget * 0.3),
+          reason: '勝率1位馬'
+        });
+        bets.push({
+          type: '複勝',
+          horses: [`${top3[0].horseNum}. ${top3[0].name}`],
+          amount: Math.floor(budget * 0.2),
+          reason: '勝率1位馬'
+        });
+      }
+      
+      // 馬連
+      if (budget >= 500 && top3.length >= 2) {
+        bets.push({
+          type: '馬連',
+          horses: [`${top3[0].horseNum}. ${top3[0].name}`, `${top3[1].horseNum}. ${top3[1].name}`],
+          amount: Math.floor(budget * 0.25),
+          reason: '勝率TOP2'
+        });
+      }
+      
+      // 三連複
+      if (budget >= 1000 && top3.length >= 3) {
+        bets.push({
+          type: '三連複',
+          horses: top3.map(h => `${h.horseNum}. ${h.name}`),
+          amount: Math.floor(budget * 0.25),
+          reason: '勝率TOP3'
+        });
+      }
+    } else if (bettingType === 'value') {
+      // 回収率特化型：期待値馬から買い目生成
+      const expectationHorses = resultsWithRate
+        .map(horse => {
+          const odds = oddsInput[horse.horseNum] || 0;
+          const value = odds * horse.winRate;
+          return { ...horse, expectation: value, odds };
+        })
+        .filter(h => h.winRate >= 10 && h.expectation >= 150)
+        .sort((a, b) => b.expectation - a.expectation);
+      
+      if (expectationHorses.length === 0) {
+        bets.push({
+          type: '情報',
+          horses: [],
+          amount: 0,
+          reason: '期待値150以上の馬が見つかりませんでした'
+        });
+      } else {
+        const top = expectationHorses[0];
+        
+        // 単勝
+        bets.push({
+          type: '単勝',
+          horses: [`${top.horseNum}. ${top.name}`],
+          amount: Math.floor(budget * 0.4),
+          reason: `期待値${top.expectation.toFixed(0)}（オッズ${top.odds.toFixed(1)}倍）`
+        });
+        
+        // 複勝
+        bets.push({
+          type: '複勝',
+          horses: [`${top.horseNum}. ${top.name}`],
+          amount: Math.floor(budget * 0.3),
+          reason: `期待値馬で手堅く`
+        });
+        
+        // 馬連（期待値TOP2）
+        if (budget >= 500 && expectationHorses.length >= 2) {
+          bets.push({
+            type: '馬連',
+            horses: [
+              `${expectationHorses[0].horseNum}. ${expectationHorses[0].name}`,
+              `${expectationHorses[1].horseNum}. ${expectationHorses[1].name}`
+            ],
+            amount: Math.floor(budget * 0.3),
+            reason: '期待値TOP2'
+          });
+        }
+      }
+    }
+
+    setGeneratedBets(bets);
+  };
+
+  const calculateStats = (courseKey = null, statsType = 'winrate') => {
+    let recordedRaces = races.filter(r => r.result && r.odds && Object.keys(r.odds).length > 0);
     
     if (courseKey) {
       recordedRaces = recordedRaces.filter(r => r.courseKey === courseKey);
@@ -370,8 +510,59 @@ const HorseAnalysisApp = () => {
     
     if (recordedRaces.length === 0) return null;
 
-    const tanshoHits = recordedRaces.filter(r => r.result.tansho === 'hit').length;
-    const fukushoHits = recordedRaces.filter(r => r.result.fukusho === 'hit').length;
+    let tanshoHits = 0;
+    let fukushoHits = 0;
+
+    recordedRaces.forEach(race => {
+      const raceWinRates = calculateWinRate(race.horses, race.courseKey);
+      
+      let targetHorse = null;
+      
+      if (statsType === 'winrate') {
+        // 勝率1位馬
+        targetHorse = raceWinRates[0];
+      } else if (statsType === 'expectation') {
+        // 期待値馬（期待値150以上で最も期待値が高い馬）
+        const candidates = raceWinRates
+          .map(horse => {
+            const odds = race.odds[horse.horseNum] || 0;
+            const value = odds * horse.winRate;
+            return { ...horse, expectation: value };
+          })
+          .filter(h => h.winRate >= 10 && h.expectation >= 150)
+          .sort((a, b) => b.expectation - a.expectation);
+        
+        targetHorse = candidates[0] || null;
+      } else if (statsType === 'ai') {
+        // AIおすすめ馬（期待値100以上 かつ 勝率10%以上で最も勝率が高い馬）
+        const candidates = raceWinRates
+          .filter(horse => {
+            const odds = race.odds[horse.horseNum] || 0;
+            const value = odds * horse.winRate;
+            return value >= 100 && horse.winRate >= 10;
+          })
+          .sort((a, b) => b.winRate - a.winRate);
+        
+        targetHorse = candidates[0] || null;
+      }
+      
+      if (!targetHorse) return;
+      
+      // 着順を解析
+      const ranking = race.result.ranking.split(/[\s\-,]/);
+      const resultNums = ranking.map(r => {
+        const num = parseInt(r);
+        return isNaN(num) ? null : num;
+      }).filter(n => n !== null);
+      
+      if (resultNums[0] === targetHorse.horseNum) {
+        tanshoHits++;
+      }
+      
+      if (resultNums.slice(0, 3).includes(targetHorse.horseNum)) {
+        fukushoHits++;
+      }
+    });
 
     return {
       total: recordedRaces.length,
@@ -701,29 +892,74 @@ const HorseAnalysisApp = () => {
             <div className="bg-white rounded-3xl p-8 shadow-lg border-2 border-blue-200">
               <h2 className="text-2xl font-bold text-gray-700 mb-6">成績分析📊</h2>
               
-              {calculateStats(statsFilterCourse) ? (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div className="bg-gradient-to-br from-pink-100 to-pink-200 rounded-3xl p-6 border-2 border-pink-300 shadow-lg">
-                    <h3 className="text-lg font-bold text-pink-700 mb-3">単勝</h3>
-                    <div className="text-4xl font-black text-pink-600">
-                      {calculateStats(statsFilterCourse).tansho.rate}%
-                    </div>
-                    <div className="text-sm text-pink-700 mt-2 font-bold">
-                      {calculateStats(statsFilterCourse).tansho.hits}/{calculateStats(statsFilterCourse).total} 的中
-                    </div>
+              {/* タブ切り替え */}
+              <div className="flex gap-2 mb-6 flex-wrap">
+                <button
+                  onClick={() => setStatsType('winrate')}
+                  className={`px-4 py-2 rounded-full font-bold transition text-sm ${
+                    statsType === 'winrate'
+                      ? 'bg-pink-400 text-white'
+                      : 'bg-gray-200 text-gray-800 hover:bg-gray-300'
+                  }`}
+                >
+                  勝率1位馬
+                </button>
+                <button
+                  onClick={() => setStatsType('expectation')}
+                  className={`px-4 py-2 rounded-full font-bold transition text-sm ${
+                    statsType === 'expectation'
+                      ? 'bg-yellow-400 text-white'
+                      : 'bg-gray-200 text-gray-800 hover:bg-gray-300'
+                  }`}
+                >
+                  期待値馬
+                </button>
+                <button
+                  onClick={() => setStatsType('ai')}
+                  className={`px-4 py-2 rounded-full font-bold transition text-sm ${
+                    statsType === 'ai'
+                      ? 'bg-blue-400 text-white'
+                      : 'bg-gray-200 text-gray-800 hover:bg-gray-300'
+                  }`}
+                >
+                  🤖 AIおすすめ馬
+                </button>
+              </div>
+              
+              {calculateStats(statsFilterCourse, statsType) ? (
+                <div>
+                  <div className="mb-4 p-3 bg-gray-100 rounded-2xl text-sm text-gray-700 font-bold">
+                    {statsType === 'winrate' && '各レースの勝率1位馬の成績'}
+                    {statsType === 'expectation' && '期待値150以上で最も期待値が高い馬の成績'}
+                    {statsType === 'ai' && 'AIおすすめ馬（期待値100以上 かつ 勝率10%以上で最も勝率が高い馬）の成績'}
                   </div>
-                  <div className="bg-gradient-to-br from-purple-100 to-purple-200 rounded-3xl p-6 border-2 border-purple-300 shadow-lg">
-                    <h3 className="text-lg font-bold text-purple-700 mb-3">複勝</h3>
-                    <div className="text-4xl font-black text-purple-600">
-                      {calculateStats(statsFilterCourse).fukusho.rate}%
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="bg-gradient-to-br from-pink-100 to-pink-200 rounded-3xl p-6 border-2 border-pink-300 shadow-lg">
+                      <h3 className="text-lg font-bold text-pink-700 mb-3">単勝</h3>
+                      <div className="text-4xl font-black text-pink-600">
+                        {calculateStats(statsFilterCourse, statsType).tansho.rate}%
+                      </div>
+                      <div className="text-sm text-pink-700 mt-2 font-bold">
+                        {calculateStats(statsFilterCourse, statsType).tansho.hits}/{calculateStats(statsFilterCourse, statsType).total} 的中
+                      </div>
                     </div>
-                    <div className="text-sm text-purple-700 mt-2 font-bold">
-                      {calculateStats(statsFilterCourse).fukusho.hits}/{calculateStats(statsFilterCourse).total} 的中
+                    <div className="bg-gradient-to-br from-purple-100 to-purple-200 rounded-3xl p-6 border-2 border-purple-300 shadow-lg">
+                      <h3 className="text-lg font-bold text-purple-700 mb-3">複勝</h3>
+                      <div className="text-4xl font-black text-purple-600">
+                        {calculateStats(statsFilterCourse, statsType).fukusho.rate}%
+                      </div>
+                      <div className="text-sm text-purple-700 mt-2 font-bold">
+                        {calculateStats(statsFilterCourse, statsType).fukusho.hits}/{calculateStats(statsFilterCourse, statsType).total} 的中
+                      </div>
                     </div>
                   </div>
                 </div>
               ) : (
-                <p className="text-gray-500 text-center py-12 text-lg">結果が記録されたレースがありません</p>
+                <p className="text-gray-500 text-center py-12 text-lg">
+                  {statsType === 'expectation' && '期待値馬がいるレースの結果がまだありません'}
+                  {statsType === 'ai' && 'AIおすすめ馬がいるレースの結果がまだありません'}
+                  {statsType === 'winrate' && '結果が記録されたレースがありません'}
+                </p>
               )}
             </div>
           )}
@@ -966,6 +1202,8 @@ const HorseAnalysisApp = () => {
   }
 
   const resultsWithRate = calculateWinRate(currentRace.horses, raceSelectedCourse);
+  const expectationRanking = calculateExpectationRanking(resultsWithRate, oddsInput);
+  const aiRecommendation = calculateAIRecommendation(resultsWithRate);
 
   return (
     <div className="w-full min-h-screen bg-gradient-to-br from-pink-100 via-purple-50 to-blue-100 p-6">
@@ -1062,6 +1300,17 @@ const HorseAnalysisApp = () => {
               >
                 オッズ入力
               </button>
+              <button
+                onClick={() => {
+                  setBettingBudget(1000);
+                  setBettingType('accuracy');
+                  setGeneratedBets([]);
+                  setShowBettingModal(true);
+                }}
+                className="px-3 md:px-4 py-1 md:py-2 bg-gradient-to-r from-cyan-400 to-cyan-500 text-white rounded-full font-bold text-xs md:text-sm shadow-lg hover:shadow-2xl hover:scale-105 transition transform whitespace-nowrap"
+              >
+                💰 買い目生成
+              </button>
               {isAdmin && (
                 <button
                   onClick={() => setShowResultModal(true)}
@@ -1105,6 +1354,9 @@ const HorseAnalysisApp = () => {
                         {odds > 0 && (
                           <div className="text-xs text-gray-700 mt-1 font-bold">
                             オッズ{odds.toFixed(1)}×勝{horse.winRate.toFixed(1)}％＝{value.toFixed(0)}
+                            {expectationRanking[horse.horseNum] && (
+                              <span className="text-purple-600">（全体期待値{expectationRanking[horse.horseNum]}位）</span>
+                            )}
                           </div>
                         )}
                       </div>
@@ -1149,6 +1401,39 @@ const HorseAnalysisApp = () => {
                         </div>
                       </div>
                     ))}
+                </div>
+              </div>
+            )}
+
+            {/* AIおすすめ馬 */}
+            {aiRecommendation && (
+              <div className="mt-6 pt-4 border-t-2 border-blue-300">
+                <div className="flex items-center gap-2 mb-3">
+                  <span className="text-2xl">🤖</span>
+                  <p className="text-sm text-blue-600 font-bold">AIおすすめ馬</p>
+                </div>
+                <div className="p-4 bg-gradient-to-r from-blue-100 to-cyan-100 rounded-2xl border-2 border-blue-400 shadow-md">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-4 flex-1">
+                      <div className="text-2xl font-black text-blue-700">
+                        🎯
+                      </div>
+                      <div className="flex-1">
+                        <div className="text-lg font-bold text-gray-800">
+                          {aiRecommendation.horseNum}. {aiRecommendation.name}
+                        </div>
+                        <div className="text-xs text-gray-700 mt-1 font-bold">
+                          勝率{aiRecommendation.winRate.toFixed(1)}% · 
+                          期待値{(oddsInput[aiRecommendation.horseNum] * aiRecommendation.winRate).toFixed(0)}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-xs text-blue-700 font-bold">
+                        期待値100以上 かつ<br/>勝率10%以上で<br/>最も勝率が高い馬
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
             )}
@@ -1415,6 +1700,112 @@ const HorseAnalysisApp = () => {
                   className="flex-1 px-4 py-3 bg-gray-300 text-gray-800 rounded-full font-bold hover:bg-gray-400 transition"
                 >
                   キャンセル
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* モーダル: 買い目自動生成 */}
+        {showBettingModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+            <div className="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl max-h-[90vh] overflow-y-auto">
+              <h3 className="text-2xl font-bold mb-6 text-gray-800">💰 買い目自動生成</h3>
+              
+              <div className="mb-6">
+                <label className="block text-sm font-bold text-gray-700 mb-3">予算を入力</label>
+                <input
+                  type="number"
+                  value={bettingBudget}
+                  onChange={(e) => setBettingBudget(parseInt(e.target.value) || 0)}
+                  className="w-full px-4 py-3 border-2 border-cyan-300 rounded-2xl text-sm focus:outline-none focus:border-cyan-500 font-bold"
+                  placeholder="1000"
+                />
+              </div>
+
+              <div className="mb-6">
+                <label className="block text-sm font-bold text-gray-700 mb-3">購入タイプ</label>
+                <div className="space-y-3">
+                  <button
+                    onClick={() => setBettingType('accuracy')}
+                    className={`w-full px-4 py-3 rounded-2xl text-left font-bold transition ${
+                      bettingType === 'accuracy'
+                        ? 'bg-gradient-to-r from-pink-400 to-pink-500 text-white'
+                        : 'bg-gray-100 text-gray-800 hover:bg-gray-200'
+                    }`}
+                  >
+                    🎯 的中率特化型
+                    <p className="text-xs mt-1 opacity-80">勝率1位馬から買い目を生成</p>
+                  </button>
+                  <button
+                    onClick={() => setBettingType('value')}
+                    className={`w-full px-4 py-3 rounded-2xl text-left font-bold transition ${
+                      bettingType === 'value'
+                        ? 'bg-gradient-to-r from-yellow-400 to-yellow-500 text-white'
+                        : 'bg-gray-100 text-gray-800 hover:bg-gray-200'
+                    }`}
+                  >
+                    💎 回収率特化型
+                    <p className="text-xs mt-1 opacity-80">期待値馬から買い目を生成</p>
+                  </button>
+                </div>
+              </div>
+
+              {generatedBets.length === 0 ? (
+                <button
+                  onClick={generateBettingRecommendations}
+                  className="w-full px-6 py-3 bg-gradient-to-r from-cyan-400 to-cyan-500 text-white rounded-full font-bold shadow-lg hover:shadow-2xl transition mb-4"
+                >
+                  買い目を生成
+                </button>
+              ) : (
+                <div className="mb-6">
+                  <h4 className="text-lg font-bold text-gray-700 mb-3">推奨買い目</h4>
+                  <div className="space-y-3">
+                    {generatedBets.map((bet, idx) => (
+                      <div key={idx} className="p-4 bg-gradient-to-r from-cyan-50 to-blue-50 rounded-2xl border-2 border-cyan-300">
+                        <div className="flex justify-between items-start mb-2">
+                          <span className="font-bold text-cyan-700">{bet.type}</span>
+                          {bet.amount > 0 && (
+                            <span className="font-bold text-gray-700">{bet.amount}円</span>
+                          )}
+                        </div>
+                        {bet.horses.length > 0 && (
+                          <div className="text-sm text-gray-700 font-bold mb-1">
+                            {bet.horses.join(' - ')}
+                          </div>
+                        )}
+                        <div className="text-xs text-gray-600 font-bold">
+                          {bet.reason}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="mt-4 p-3 bg-cyan-100 rounded-2xl text-sm text-cyan-800 font-bold">
+                    合計: {generatedBets.reduce((sum, bet) => sum + bet.amount, 0)}円
+                  </div>
+                </div>
+              )}
+
+              <div className="flex gap-4">
+                {generatedBets.length > 0 && (
+                  <button
+                    onClick={() => {
+                      setGeneratedBets([]);
+                    }}
+                    className="flex-1 px-4 py-3 bg-gray-300 text-gray-800 rounded-full font-bold hover:bg-gray-400 transition"
+                  >
+                    再生成
+                  </button>
+                )}
+                <button
+                  onClick={() => {
+                    setShowBettingModal(false);
+                    setGeneratedBets([]);
+                  }}
+                  className="flex-1 px-4 py-3 bg-gray-400 text-white rounded-full font-bold hover:bg-gray-500 transition"
+                >
+                  閉じる
                 </button>
               </div>
             </div>
