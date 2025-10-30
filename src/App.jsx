@@ -313,25 +313,6 @@ const HorseAnalysisApp = () => {
     setShowExpModal(false);
   };
 
-  // 全体期待値の計算（ランク付け用）
-  const calculateAllExpectationValues = () => {
-    const allValues = [];
-    races.forEach(race => {
-      if (race.odds && Object.keys(race.odds).length > 0) {
-        race.horses.forEach(horse => {
-          const odds = race.odds[horse.horseNum] || 0;
-          if (odds > 0) {
-            // 簡易的にデフォルト勝率を使用（実際はレースごとの勝率を使うべき）
-            const winRate = 10; // ここは後で改善可能
-            const expectation = odds * winRate;
-            allValues.push({ expectation, raceId: race.firebaseId, horseNum: horse.horseNum });
-          }
-        });
-      }
-    });
-    return allValues.sort((a, b) => b.expectation - a.expectation);
-  };
-
   const calculateWinRate = (horses, courseKey = null) => {
     if (!horses || horses.length === 0) return [];
 
@@ -618,25 +599,46 @@ const HorseAnalysisApp = () => {
                           </button>
                         )}
                       </div>
-                      {/* 期待値馬のいるレースを表示 */}
-                      {race.odds && Object.keys(race.odds).length > 0 && (
-                        <div className="text-xl mb-2">
-                          {race.horses.some(horse => {
-                            const odds = race.odds[horse.horseNum] || 0;
-                            // 簡易的な勝率計算（ここでは10%と仮定）
-                            const value = odds * 10;
-                            return value >= 220;
-                          }) ? '💎超期待値馬あり！' : 
-                          race.horses.some(horse => {
-                            const odds = race.odds[horse.horseNum] || 0;
-                            const value = odds * 10;
-                            return value >= 150 && value < 220;
-                          }) ? '✨期待値馬あり！' : ''}
-                        </div>
-                      )}
+                      {/* 期待値馬のいるレースを表示（修正版） */}
+                      {race.odds && Object.keys(race.odds).length > 0 && (() => {
+                        // このレースの勝率を計算
+                        const raceWinRates = calculateWinRate(race.horses, race.courseKey);
+                        const hasSuperExpectation = race.horses.some(horse => {
+                          const odds = race.odds[horse.horseNum] || 0;
+                          const horseData = raceWinRates.find(h => h.horseNum === horse.horseNum);
+                          const winRate = horseData ? horseData.winRate : 0;
+                          const value = odds * winRate;
+                          return winRate >= 10 && value >= 220;
+                        });
+                        const hasExpectation = race.horses.some(horse => {
+                          const odds = race.odds[horse.horseNum] || 0;
+                          const horseData = raceWinRates.find(h => h.horseNum === horse.horseNum);
+                          const winRate = horseData ? horseData.winRate : 0;
+                          const value = odds * winRate;
+                          return winRate >= 10 && value >= 150 && value < 220;
+                        });
+                        
+                        if (hasSuperExpectation) {
+                          return (
+                            <div className="flex items-center gap-1 text-sm font-bold bg-gradient-to-r from-yellow-400 to-orange-400 text-white px-3 py-1.5 rounded-full shadow-md animate-pulse">
+                              <span className="text-base">💎</span>
+                              <span>超期待値馬あり！</span>
+                              <span className="text-base">✨</span>
+                            </div>
+                          );
+                        } else if (hasExpectation) {
+                          return (
+                            <div className="flex items-center gap-1 text-sm font-bold bg-gradient-to-r from-yellow-300 to-yellow-400 text-yellow-900 px-3 py-1.5 rounded-full shadow-md">
+                              <span className="text-base">✨</span>
+                              <span>期待値馬あり！</span>
+                            </div>
+                          );
+                        }
+                        return null;
+                      })()}
                       
                       {race.result && (
-                        <div className="flex items-center gap-2 flex-wrap">
+                        <div className="flex items-center gap-2 flex-wrap mt-2">
                           <span className="text-xs md:text-sm font-bold text-gray-700">結果: {race.result.ranking}</span>
                           {race.result?.fukusho === 'hit' && <span className="text-base md:text-lg">✅</span>}
                         </div>
@@ -1076,8 +1078,8 @@ const HorseAnalysisApp = () => {
               const odds = oddsInput[horse.horseNum] || 0;
               const value = odds * horse.winRate;
               
-              // 期待値の判定
-              const isSuperExpectation = value >= 220; // 超期待値馬
+              // 期待値の判定（修正版）
+              const isSuperExpectation = horse.winRate >= 10 && value >= 220; // 超期待値馬
               const isGoodExpectation = horse.winRate >= 10 && value >= 150 && value < 220; // 期待値馬
               
               return (
