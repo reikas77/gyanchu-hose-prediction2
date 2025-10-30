@@ -77,7 +77,6 @@ const HorseAnalysisApp = () => {
   const [showExcludeModal, setShowExcludeModal] = useState(false);
   const [excludedHorses, setExcludedHorses] = useState({});
   
-  // 🆕 EXP係数管理
   const [expCoefficient, setExpCoefficient] = useState(0.1);
   const [showExpModal, setShowExpModal] = useState(false);
   const [tempExpCoefficient, setTempExpCoefficient] = useState(0.1);
@@ -101,7 +100,6 @@ const HorseAnalysisApp = () => {
       if (user) {
         setUserId(user.uid);
         
-        // Firebaseからレースデータを取得
         const racesRef = ref(database, 'races');
         onValue(racesRef, snapshot => {
           const data = snapshot.val();
@@ -117,7 +115,6 @@ const HorseAnalysisApp = () => {
           setIsLoading(false);
         });
 
-        // Firebaseからコース設定を取得
         const settingsRef = ref(database, 'courseSettings');
         onValue(settingsRef, snapshot => {
           const data = snapshot.val();
@@ -212,12 +209,11 @@ const HorseAnalysisApp = () => {
       odds: {},
       memo: '',
       excluded: {},
-      expCoefficient: 0.1, // 🆕 初期値0.1
+      expCoefficient: 0.1,
       createdBy: userId,
       createdTime: new Date().toISOString()
     };
 
-    // Firebaseに保存
     const racesRef = ref(database, 'races');
     push(racesRef, newRace);
 
@@ -248,7 +244,6 @@ const HorseAnalysisApp = () => {
       [courseName]: { ...tempFactors }
     };
     
-    // Firebaseに保存
     const settingsRef = ref(database, 'courseSettings');
     set(settingsRef, newSettings);
 
@@ -304,7 +299,6 @@ const HorseAnalysisApp = () => {
     setShowExcludeModal(false);
   };
 
-  // 🆕 EXP係数を保存
   const saveExpCoefficient = () => {
     setExpCoefficient(tempExpCoefficient);
     const raceRef = ref(database, `races/${currentRace.firebaseId}`);
@@ -335,7 +329,6 @@ const HorseAnalysisApp = () => {
         '調教': 15
       };
 
-    // 除外されていない馬のみを計算対象にする
     const activeHorses = horses.filter(horse => !excludedHorses[horse.horseNum]);
 
     const horsesWithScores = activeHorses.map(horse => {
@@ -355,7 +348,6 @@ const HorseAnalysisApp = () => {
     if (horsesWithScores.length === 0) return [];
 
     const maxScore = Math.max(...horsesWithScores.map(h => h.totalScore));
-    // 🔧 EXP係数を動的に使用
     const exponentials = horsesWithScores.map(horse => ({
       ...horse,
       exp: Math.exp((horse.totalScore - maxScore) * expCoefficient)
@@ -419,7 +411,6 @@ const HorseAnalysisApp = () => {
     const tanshoDic = resultNums[0] === top1.horseNum ? 'hit' : 'miss';
     const fukushoHit = resultNums.slice(0, 3).includes(top1.horseNum) ? 'hit' : 'miss';
 
-    // Firebaseに保存
     const raceRef = ref(database, `races/${currentRace.firebaseId}`);
     set(raceRef, {
       ...currentRace,
@@ -462,10 +453,10 @@ const HorseAnalysisApp = () => {
 
   if (isLoading) {
     return (
-      <div className="w-full max-w-4xl mx-auto p-6 bg-gray-50 min-h-screen flex items-center justify-center">
+      <div className="w-full min-h-screen bg-gradient-to-br from-pink-100 via-purple-50 to-blue-100 flex items-center justify-center">
         <div className="text-center">
-          <p className="text-gray-700 font-semibold mb-4">読み込み中...</p>
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto"></div>
+          <p className="text-gray-700 font-semibold mb-4 text-lg">読み込み中...</p>
+          <div className="animate-spin rounded-full h-12 w-12 border-4 border-purple-300 border-t-purple-600 mx-auto"></div>
         </div>
       </div>
     );
@@ -473,442 +464,465 @@ const HorseAnalysisApp = () => {
 
   if (!currentRace) {
     return (
-      <div className="w-full max-w-4xl mx-auto p-6 bg-gray-50 min-h-screen">
-        <div className="flex justify-between items-center mb-6">
-          <h1 className="text-3xl font-bold text-gray-800">競馬予想分析ツール</h1>
-          <button
-            onClick={() => setShowAdminModal(true)}
-            className="text-2xl hover:opacity-70"
-          >
-            ⚙️
-          </button>
-        </div>
-
-        <div className="flex gap-4 mb-6 flex-wrap">
-          <button
-            onClick={() => setActiveTab('races-upcoming')}
-            className={`px-6 py-2 rounded-md font-semibold ${
-              activeTab === 'races-upcoming' || activeTab === 'races-past'
-                ? 'bg-blue-500 text-white'
-                : 'bg-gray-300 text-gray-800'
-            }`}
-          >
-            レース予想
-          </button>
-          <button
-            onClick={() => setActiveTab('settings')}
-            className={`px-6 py-2 rounded-md font-semibold ${
-              activeTab === 'settings'
-                ? 'bg-blue-500 text-white'
-                : 'bg-gray-300 text-gray-800'
-            }`}
-            disabled={!isAdmin}
-          >
-            コース設定
-          </button>
-          <button
-            onClick={() => setActiveTab('stats')}
-            className={`px-6 py-2 rounded-md font-semibold ${
-              activeTab === 'stats'
-                ? 'bg-blue-500 text-white'
-                : 'bg-gray-300 text-gray-800'
-            }`}
-          >
-            成績分析
-          </button>
-        </div>
-
-        {(activeTab === 'races-upcoming' || activeTab === 'races-past') && (
-          <div className="bg-white rounded-lg p-6 shadow">
-            {isAdmin && (
-              <button
-                onClick={() => setShowUploadModal(true)}
-                className="px-6 py-3 bg-blue-500 text-white rounded-md hover:bg-blue-600 font-semibold mb-4"
-              >
-                📤 レースデータを追加
-              </button>
-            )}
-            {!isAdmin && <p className="text-gray-500 text-sm mb-4">※ 管理者のみ追加可能</p>}
-
-            <div className="flex gap-2 mb-4">
-              <button
-                onClick={() => setActiveTab('races-upcoming')}
-                className={`px-4 py-2 rounded-md font-semibold ${
-                  activeTab === 'races-upcoming'
-                    ? 'bg-blue-500 text-white'
-                    : 'bg-gray-300 text-gray-800'
-                }`}
-              >
-                レース予想
-              </button>
-              <button
-                onClick={() => setActiveTab('races-past')}
-                className={`px-4 py-2 rounded-md font-semibold flex items-center gap-2 ${
-                  activeTab === 'races-past'
-                    ? 'bg-blue-500 text-white'
-                    : 'bg-gray-300 text-gray-800'
-                }`}
-              >
-                過去の予想
-                {races.filter(r => r.result?.fukusho === 'hit').length > 0 && (
-                  <span className="text-lg">✅</span>
-                )}
-              </button>
+      <div className="w-full min-h-screen bg-gradient-to-br from-pink-100 via-purple-50 to-blue-100 p-6">
+        <div className="max-w-4xl mx-auto">
+          {/* ヘッダー */}
+          <div className="flex justify-between items-center mb-8">
+            <div className="text-center flex-1">
+              <h1 className="text-5xl font-black bg-gradient-to-r from-pink-500 to-purple-500 bg-clip-text text-transparent mb-2">
+                🐴 競馬予想分析ツール
+              </h1>
+              <p className="text-gray-600 text-lg">あなたの競馬ライフをもっと楽しく✨</p>
             </div>
+            <button
+              onClick={() => setShowAdminModal(true)}
+              className="text-3xl hover:scale-110 transition transform"
+            >
+              ⚙️
+            </button>
+          </div>
 
-            {races.length > 0 ? (
-              <div className="space-y-2">
-                {(activeTab === 'races-upcoming' 
-                  ? races.filter(r => !r.result)
-                  : races.filter(r => r.result)
-                ).map((race) => (
-                  <div
-                    key={race.firebaseId}
-                    className="p-4 bg-gray-50 rounded-lg border border-gray-200 hover:border-blue-400 cursor-pointer flex items-center justify-between group"
-                  >
+          {/* タブボタン */}
+          <div className="flex gap-4 mb-8 flex-wrap justify-center">
+            <button
+              onClick={() => setActiveTab('races-upcoming')}
+              className={`px-8 py-3 rounded-full font-bold shadow-lg hover:shadow-2xl hover:scale-105 transition transform ${
+                activeTab === 'races-upcoming' || activeTab === 'races-past'
+                  ? 'bg-gradient-to-r from-pink-400 to-pink-500 text-white'
+                  : 'bg-white text-gray-700 hover:bg-gray-100'
+              }`}
+            >
+              📤 レース予想
+            </button>
+            <button
+              onClick={() => setActiveTab('settings')}
+              className={`px-8 py-3 rounded-full font-bold shadow-lg hover:shadow-2xl hover:scale-105 transition transform ${
+                activeTab === 'settings'
+                  ? 'bg-gradient-to-r from-purple-400 to-purple-500 text-white'
+                  : 'bg-white text-gray-700 hover:bg-gray-100'
+              }`}
+              disabled={!isAdmin}
+            >
+              ⚙️ コース設定
+            </button>
+            <button
+              onClick={() => setActiveTab('stats')}
+              className={`px-8 py-3 rounded-full font-bold shadow-lg hover:shadow-2xl hover:scale-105 transition transform ${
+                activeTab === 'stats'
+                  ? 'bg-gradient-to-r from-blue-400 to-blue-500 text-white'
+                  : 'bg-white text-gray-700 hover:bg-gray-100'
+              }`}
+            >
+              📊 成績分析
+            </button>
+          </div>
+
+          {/* レース一覧 */}
+          {(activeTab === 'races-upcoming' || activeTab === 'races-past') && (
+            <div className="bg-white rounded-3xl p-8 shadow-lg border-2 border-pink-200">
+              {isAdmin && (
+                <button
+                  onClick={() => setShowUploadModal(true)}
+                  className="w-full px-8 py-4 bg-gradient-to-r from-pink-400 to-pink-500 text-white rounded-full hover:shadow-2xl hover:scale-105 transition transform font-bold text-lg mb-6 shadow-lg"
+                >
+                  📤 レースデータを追加
+                </button>
+              )}
+              {!isAdmin && <p className="text-gray-500 text-sm mb-6 text-center">※ 管理者のみ追加可能</p>}
+
+              <div className="flex gap-2 mb-6">
+                <button
+                  onClick={() => setActiveTab('races-upcoming')}
+                  className={`flex-1 px-4 py-2 rounded-full font-bold transition ${
+                    activeTab === 'races-upcoming'
+                      ? 'bg-pink-400 text-white'
+                      : 'bg-gray-200 text-gray-800 hover:bg-gray-300'
+                  }`}
+                >
+                  来週の予想
+                </button>
+                <button
+                  onClick={() => setActiveTab('races-past')}
+                  className={`flex-1 px-4 py-2 rounded-full font-bold transition flex items-center justify-center gap-2 ${
+                    activeTab === 'races-past'
+                      ? 'bg-pink-400 text-white'
+                      : 'bg-gray-200 text-gray-800 hover:bg-gray-300'
+                  }`}
+                >
+                  過去の予想
+                  {races.filter(r => r.result?.fukusho === 'hit').length > 0 && (
+                    <span className="text-lg">✅</span>
+                  )}
+                </button>
+              </div>
+
+              {races.length > 0 ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {(activeTab === 'races-upcoming' 
+                    ? races.filter(r => !r.result)
+                    : races.filter(r => r.result)
+                  ).map((race) => (
                     <div
-                      className="flex-1"
+                      key={race.firebaseId}
                       onClick={() => {
                         setCurrentRace(race);
                         setRaceSelectedCourse(race.courseKey);
                         setMemo(race.memo || '');
                         setOddsInput(race.odds || {});
                         setExcludedHorses(race.excluded || {});
-                        setExpCoefficient(race.expCoefficient || 0.1); // 🆕 EXP係数を読み込む
+                        setExpCoefficient(race.expCoefficient || 0.1);
                       }}
+                      className="bg-gradient-to-br from-pink-50 to-purple-50 rounded-3xl p-6 border-2 border-pink-200 hover:border-purple-400 cursor-pointer hover:shadow-lg transition shadow-md hover:scale-105 group"
                     >
-                      <h3 className="font-semibold text-gray-800">{race.name}</h3>
-                      <p className="text-sm text-gray-600">
-                        {race.createdAt} · {race.horses.length}頭
-                        {race.courseKey && ` · ${race.courseKey}`}
-                        {race.result && ' · 結果: ' + race.result.ranking}
-                        {race.result?.fukusho === 'hit' && ' ✅'}
-                      </p>
-                    </div>
-                    
-                    {isAdmin && (
-                      <button
-                        onClick={() => {
-                          setRaceToDelete(race.firebaseId);
-                          setShowDeleteConfirm(true);
-                        }}
-                        className="ml-4 p-2 text-red-500 hover:bg-red-50 rounded-md opacity-0 group-hover:opacity-100 transition"
-                        title="このレースを削除"
-                      >
-                        🗑️
-                      </button>
-                    )}
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <p className="text-gray-500 text-center py-8">レースデータがまだありません</p>
-            )}
-          </div>
-        )}
-
-        {activeTab === 'settings' && isAdmin && (
-          <div className="bg-white rounded-lg p-6 shadow">
-            <button
-              onClick={() => setShowSettingsModal(true)}
-              className="px-6 py-3 bg-green-500 text-white rounded-md hover:bg-green-600 transition font-semibold mb-4"
-            >
-              新しいコース設定を作成
-            </button>
-
-            {Object.keys(courseSettings).length > 0 ? (
-              <div className="space-y-3">
-                <h2 className="text-lg font-semibold text-gray-700 mb-3">保存済みコース設定</h2>
-                {Object.entries(courseSettings).map(([name, factorData]) => (
-                  <div
-                    key={name}
-                    className="p-4 bg-gray-50 rounded-lg border border-gray-200"
-                  >
-                    <div className="flex justify-between items-start mb-3">
-                      <h3 className="font-semibold text-gray-800 text-lg">{name}</h3>
-                      <button
-                        onClick={() => deleteCourseSettings(name)}
-                        className="p-2 text-red-500 hover:bg-red-50 rounded-md transition"
-                      >
-                        🗑️
-                      </button>
-                    </div>
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-sm">
-                      {Object.entries(factorData).map(([factor, weight]) => (
-                        <div key={factor} className="bg-white p-2 rounded border border-gray-200">
-                          <div className="text-gray-600 text-xs">{factor}</div>
-                          <div className="font-bold text-blue-600">{weight}%</div>
+                      <div className="flex items-start justify-between mb-3">
+                        <div>
+                          <h3 className="font-bold text-lg text-gray-800 flex items-center gap-2">
+                            <span className="text-2xl">🏇</span>
+                            {race.name}
+                          </h3>
+                          <p className="text-sm text-gray-600 mt-1">
+                            {race.createdAt} · {race.horses.length}頭
+                            {race.courseKey && ` · ${race.courseKey}`}
+                          </p>
                         </div>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <p className="text-gray-500 text-center py-8">保存されたコース設定がありません</p>
-            )}
-          </div>
-        )}
-
-        {activeTab === 'stats' && (
-          <div className="bg-white rounded-lg p-6 shadow">
-            <h2 className="text-lg font-semibold text-gray-700 mb-4">成績分析</h2>
-            
-            {calculateStats(statsFilterCourse) ? (
-              <div className="grid grid-cols-2 gap-4">
-                <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
-                  <h3 className="text-sm font-semibold text-gray-600 mb-2">単勝</h3>
-                  <div className="text-2xl font-bold text-blue-600">
-                    {calculateStats(statsFilterCourse).tansho.rate}%
-                  </div>
-                  <div className="text-sm text-gray-600 mt-1">
-                    {calculateStats(statsFilterCourse).tansho.hits}/{calculateStats(statsFilterCourse).total}
-                  </div>
-                </div>
-                <div className="p-4 bg-green-50 rounded-lg border border-green-200">
-                  <h3 className="text-sm font-semibold text-gray-600 mb-2">複勝</h3>
-                  <div className="text-2xl font-bold text-green-600">
-                    {calculateStats(statsFilterCourse).fukusho.rate}%
-                  </div>
-                  <div className="text-sm text-gray-600 mt-1">
-                    {calculateStats(statsFilterCourse).fukusho.hits}/{calculateStats(statsFilterCourse).total}
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <p className="text-gray-500 text-center py-8">結果が記録されたレースがありません</p>
-            )}
-          </div>
-        )}
-
-        {showSettingsModal && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-            <div className="bg-white rounded-lg p-6 max-w-2xl w-full shadow-lg max-h-96 overflow-y-auto">
-              <h3 className="text-xl font-semibold mb-4 text-gray-800">新しいコース設定を作成</h3>
-
-              <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-600 mb-2">コース名</label>
-                <input
-                  type="text"
-                  value={courseName}
-                  onChange={(e) => setCourseName(e.target.value)}
-                  placeholder="例：新潟千直、京都ダ1400"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-
-              <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-600 mb-3">比重設定（合計100%）</label>
-                <div className="space-y-2">
-                  {Object.entries(tempFactors).map(([factor, weight]) => (
-                    <div key={factor} className="flex items-center gap-3">
-                      <label className="w-40 text-sm text-gray-700">{factor}</label>
-                      <input
-                        type="number"
-                        value={weight}
-                        onChange={(e) => setTempFactors({
-                          ...tempFactors,
-                          [factor]: parseInt(e.target.value) || 0
-                        })}
-                        className="w-20 px-3 py-1 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      />
-                      <span className="text-sm text-gray-600">%</span>
+                        {isAdmin && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setRaceToDelete(race.firebaseId);
+                              setShowDeleteConfirm(true);
+                            }}
+                            className="p-2 text-red-500 hover:bg-red-50 rounded-full opacity-0 group-hover:opacity-100 transition"
+                            title="削除"
+                          >
+                            🗑️
+                          </button>
+                        )}
+                      </div>
+                      {race.result && (
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-bold text-gray-700">結果: {race.result.ranking}</span>
+                          {race.result?.fukusho === 'hit' && <span className="text-lg">✅</span>}
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
-                <div className="mt-3 p-2 bg-blue-100 rounded text-sm text-blue-800">
-                  合計: {Object.values(tempFactors).reduce((a, b) => a + b, 0)}%
-                </div>
-              </div>
-
-              <div className="flex gap-3">
-                <button
-                  onClick={saveCourseSettings}
-                  className="flex-1 px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 transition font-semibold"
-                >
-                  保存
-                </button>
-                <button
-                  onClick={() => {
-                    setShowSettingsModal(false);
-                    setCourseName('');
-                    setTempFactors({
-                      '能力値': 15,
-                      'コース・距離適性': 18,
-                      '展開利': 17,
-                      '近走安定度': 10,
-                      '馬場適性': 10,
-                      '騎手': 5,
-                      '斤量': 10,
-                      '調教': 15
-                    });
-                  }}
-                  className="flex-1 px-4 py-2 bg-gray-300 text-gray-800 rounded-md hover:bg-gray-400 transition"
-                >
-                  キャンセル
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {showUploadModal && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-            <div className="bg-white rounded-lg p-6 max-w-2xl w-full shadow-lg">
-              <h3 className="text-xl font-semibold mb-4 text-gray-800">レースデータを追加</h3>
-
-              {importMessage && (
-                <div className={`p-3 rounded-md mb-4 ${
-                  importMessageType === 'success' 
-                    ? 'bg-green-100 text-green-800 border border-green-300' 
-                    : 'bg-red-100 text-red-800 border border-red-300'
-                }`}>
-                  {importMessage}
-                </div>
+              ) : (
+                <p className="text-gray-500 text-center py-12 text-lg">レースデータがまだありません</p>
               )}
-
-              <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-600 mb-2">レース名</label>
-                <input
-                  type="text"
-                  value={raceName}
-                  onChange={(e) => setRaceName(e.target.value)}
-                  placeholder="例：京都12R 嵯峨野特別"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                />
-              </div>
-
-              <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-600 mb-2">コース設定を選択（オプション）</label>
-                <select
-                  value={selectedCourse || ''}
-                  onChange={(e) => setSelectedCourse(e.target.value || null)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                >
-                  <option value="">デフォルト設定を使用</option>
-                  {Object.keys(courseSettings).map(name => (
-                    <option key={name} value={name}>{name}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-600 mb-2">データ（コピペ）</label>
-                <textarea
-                  value={pasteText}
-                  onChange={(e) => setPasteText(e.target.value)}
-                  className="w-full h-48 p-3 border border-gray-300 rounded-md font-mono text-sm"
-                  placeholder="データをここにペーストしてください"
-                />
-              </div>
-
-              <div className="flex gap-3">
-                <button
-                  onClick={handleDataImport}
-                  className="flex-1 px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 transition font-semibold"
-                >
-                  追加
-                </button>
-                <button
-                  onClick={() => {
-                    setShowUploadModal(false);
-                    setPasteText('');
-                    setRaceName('');
-                    setImportMessage('');
-                    setSelectedCourse(null);
-                  }}
-                  className="flex-1 px-4 py-2 bg-gray-300 text-gray-800 rounded-md hover:bg-gray-400"
-                >
-                  キャンセル
-                </button>
-              </div>
             </div>
-          </div>
-        )}
+          )}
 
-        {showAdminModal && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-            <div className="bg-white rounded-lg p-6 max-w-md w-full shadow-lg">
-              <h3 className="text-xl font-semibold mb-4 text-gray-800">管理者パスコード</h3>
+          {/* コース設定 */}
+          {activeTab === 'settings' && isAdmin && (
+            <div className="bg-white rounded-3xl p-8 shadow-lg border-2 border-purple-200">
+              <button
+                onClick={() => setShowSettingsModal(true)}
+                className="w-full px-8 py-4 bg-gradient-to-r from-purple-400 to-purple-500 text-white rounded-full hover:shadow-2xl hover:scale-105 transition transform font-bold text-lg mb-6 shadow-lg"
+              >
+                ➕ 新しいコース設定を作成
+              </button>
+
+              {Object.keys(courseSettings).length > 0 ? (
+                <div className="space-y-4">
+                  <h2 className="text-xl font-bold text-gray-700 mb-4">保存済みコース設定</h2>
+                  {Object.entries(courseSettings).map(([name, factorData]) => (
+                    <div
+                      key={name}
+                      className="bg-gradient-to-r from-purple-50 to-blue-50 rounded-2xl p-4 border-2 border-purple-200"
+                    >
+                      <div className="flex justify-between items-start mb-3">
+                        <h3 className="font-bold text-lg text-gray-800">{name}</h3>
+                        <button
+                          onClick={() => deleteCourseSettings(name)}
+                          className="p-2 text-red-500 hover:bg-red-50 rounded-full transition"
+                        >
+                          🗑️
+                        </button>
+                      </div>
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-sm">
+                        {Object.entries(factorData).map(([factor, weight]) => (
+                          <div key={factor} className="bg-white p-2 rounded-lg border border-purple-300">
+                            <div className="text-gray-600 text-xs font-bold">{factor}</div>
+                            <div className="font-bold text-purple-600 text-lg">{weight}%</div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-gray-500 text-center py-12">保存されたコース設定がありません</p>
+              )}
+            </div>
+          )}
+
+          {/* 成績分析 */}
+          {activeTab === 'stats' && (
+            <div className="bg-white rounded-3xl p-8 shadow-lg border-2 border-blue-200">
+              <h2 className="text-2xl font-bold text-gray-700 mb-6">成績分析📊</h2>
               
-              {isAdmin && (
-                <div className="mb-4 p-3 bg-green-100 border border-green-300 rounded text-sm text-green-800">
-                  ✓ 管理者モード有効
+              {calculateStats(statsFilterCourse) ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="bg-gradient-to-br from-pink-100 to-pink-200 rounded-3xl p-6 border-2 border-pink-300 shadow-lg">
+                    <h3 className="text-lg font-bold text-pink-700 mb-3">単勝</h3>
+                    <div className="text-4xl font-black text-pink-600">
+                      {calculateStats(statsFilterCourse).tansho.rate}%
+                    </div>
+                    <div className="text-sm text-pink-700 mt-2 font-bold">
+                      {calculateStats(statsFilterCourse).tansho.hits}/{calculateStats(statsFilterCourse).total} 的中
+                    </div>
+                  </div>
+                  <div className="bg-gradient-to-br from-purple-100 to-purple-200 rounded-3xl p-6 border-2 border-purple-300 shadow-lg">
+                    <h3 className="text-lg font-bold text-purple-700 mb-3">複勝</h3>
+                    <div className="text-4xl font-black text-purple-600">
+                      {calculateStats(statsFilterCourse).fukusho.rate}%
+                    </div>
+                    <div className="text-sm text-purple-700 mt-2 font-bold">
+                      {calculateStats(statsFilterCourse).fukusho.hits}/{calculateStats(statsFilterCourse).total} 的中
+                    </div>
+                  </div>
                 </div>
+              ) : (
+                <p className="text-gray-500 text-center py-12 text-lg">結果が記録されたレースがありません</p>
               )}
+            </div>
+          )}
 
-              <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-600 mb-2">パスコードを入力</label>
-                <input
-                  type="password"
-                  value={adminPassword}
-                  onChange={(e) => setAdminPassword(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                  placeholder="パスコード"
-                />
+          {/* モーダル: アップロード */}
+          {showUploadModal && (
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+              <div className="bg-white rounded-3xl p-8 max-w-2xl w-full shadow-2xl">
+                <h3 className="text-2xl font-bold mb-6 text-gray-800">レースデータを追加</h3>
+
+                {importMessage && (
+                  <div className={`p-4 rounded-2xl mb-6 font-bold ${
+                    importMessageType === 'success' 
+                      ? 'bg-green-100 text-green-800 border-2 border-green-400' 
+                      : 'bg-red-100 text-red-800 border-2 border-red-400'
+                  }`}>
+                    {importMessage}
+                  </div>
+                )}
+
+                <div className="mb-6">
+                  <label className="block text-sm font-bold text-gray-700 mb-2">レース名</label>
+                  <input
+                    type="text"
+                    value={raceName}
+                    onChange={(e) => setRaceName(e.target.value)}
+                    placeholder="例：京都12R 嵯峨野特別"
+                    className="w-full px-4 py-3 border-2 border-pink-300 rounded-2xl focus:outline-none focus:border-pink-500 focus:ring-2 focus:ring-pink-200"
+                  />
+                </div>
+
+                <div className="mb-6">
+                  <label className="block text-sm font-bold text-gray-700 mb-2">コース設定を選択（オプション）</label>
+                  <select
+                    value={selectedCourse || ''}
+                    onChange={(e) => setSelectedCourse(e.target.value || null)}
+                    className="w-full px-4 py-3 border-2 border-pink-300 rounded-2xl focus:outline-none focus:border-pink-500"
+                  >
+                    <option value="">デフォルト設定を使用</option>
+                    {Object.keys(courseSettings).map(name => (
+                      <option key={name} value={name}>{name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="mb-6">
+                  <label className="block text-sm font-bold text-gray-700 mb-2">データ（コピペ）</label>
+                  <textarea
+                    value={pasteText}
+                    onChange={(e) => setPasteText(e.target.value)}
+                    className="w-full h-48 p-4 border-2 border-pink-300 rounded-2xl font-mono text-sm focus:outline-none focus:border-pink-500"
+                    placeholder="データをここにペーストしてください"
+                  />
+                </div>
+
+                <div className="flex gap-4">
+                  <button
+                    onClick={handleDataImport}
+                    className="flex-1 px-6 py-3 bg-gradient-to-r from-pink-400 to-pink-500 text-white rounded-full font-bold shadow-lg hover:shadow-2xl hover:scale-105 transition transform"
+                  >
+                    追加
+                  </button>
+                  <button
+                    onClick={() => {
+                      setShowUploadModal(false);
+                      setPasteText('');
+                      setRaceName('');
+                      setImportMessage('');
+                      setSelectedCourse(null);
+                    }}
+                    className="flex-1 px-6 py-3 bg-gray-300 text-gray-800 rounded-full font-bold hover:bg-gray-400 transition"
+                  >
+                    キャンセル
+                  </button>
+                </div>
               </div>
+            </div>
+          )}
 
-              <div className="flex gap-3">
-                <button
-                  onClick={() => {
-                    if (adminPassword === '1234') {
-                      setIsAdmin(true);
-                      setAdminPassword('');
+          {/* モーダル: コース設定 */}
+          {showSettingsModal && (
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+              <div className="bg-white rounded-3xl p-8 max-w-2xl w-full shadow-2xl max-h-96 overflow-y-auto">
+                <h3 className="text-2xl font-bold mb-6 text-gray-800">新しいコース設定を作成</h3>
+
+                <div className="mb-6">
+                  <label className="block text-sm font-bold text-gray-700 mb-2">コース名</label>
+                  <input
+                    type="text"
+                    value={courseName}
+                    onChange={(e) => setCourseName(e.target.value)}
+                    placeholder="例：新潟千直、京都ダ1400"
+                    className="w-full px-4 py-3 border-2 border-purple-300 rounded-2xl focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-200"
+                  />
+                </div>
+
+                <div className="mb-6">
+                  <label className="block text-sm font-bold text-gray-700 mb-3">比重設定（合計100%）</label>
+                  <div className="space-y-3">
+                    {Object.entries(tempFactors).map(([factor, weight]) => (
+                      <div key={factor} className="flex items-center gap-3">
+                        <label className="w-40 text-sm font-bold text-gray-700">{factor}</label>
+                        <input
+                          type="number"
+                          value={weight}
+                          onChange={(e) => setTempFactors({
+                            ...tempFactors,
+                            [factor]: parseInt(e.target.value) || 0
+                          })}
+                          className="w-20 px-3 py-2 border-2 border-purple-300 rounded-lg focus:outline-none focus:border-purple-500"
+                        />
+                        <span className="text-sm font-bold text-gray-600">%</span>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="mt-4 p-3 bg-purple-100 rounded-2xl text-sm text-purple-800 font-bold border-2 border-purple-300">
+                    合計: {Object.values(tempFactors).reduce((a, b) => a + b, 0)}%
+                  </div>
+                </div>
+
+                <div className="flex gap-4">
+                  <button
+                    onClick={saveCourseSettings}
+                    className="flex-1 px-6 py-3 bg-gradient-to-r from-purple-400 to-purple-500 text-white rounded-full font-bold shadow-lg hover:shadow-2xl hover:scale-105 transition transform"
+                  >
+                    保存
+                  </button>
+                  <button
+                    onClick={() => {
+                      setShowSettingsModal(false);
+                      setCourseName('');
+                      setTempFactors({
+                        '能力値': 15,
+                        'コース・距離適性': 18,
+                        '展開利': 17,
+                        '近走安定度': 10,
+                        '馬場適性': 10,
+                        '騎手': 5,
+                        '斤量': 10,
+                        '調教': 15
+                      });
+                    }}
+                    className="flex-1 px-6 py-3 bg-gray-300 text-gray-800 rounded-full font-bold hover:bg-gray-400 transition"
+                  >
+                    キャンセル
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* モーダル: 管理者認証 */}
+          {showAdminModal && (
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+              <div className="bg-white rounded-3xl p-8 max-w-md w-full shadow-2xl">
+                <h3 className="text-2xl font-bold mb-6 text-gray-800">管理者パスコード</h3>
+                
+                {isAdmin && (
+                  <div className="mb-6 p-4 bg-green-100 border-2 border-green-400 rounded-2xl text-sm text-green-800 font-bold">
+                    ✓ 管理者モード有効
+                  </div>
+                )}
+
+                <div className="mb-6">
+                  <label className="block text-sm font-bold text-gray-700 mb-2">パスコードを入力</label>
+                  <input
+                    type="password"
+                    value={adminPassword}
+                    onChange={(e) => setAdminPassword(e.target.value)}
+                    className="w-full px-4 py-3 border-2 border-pink-300 rounded-2xl focus:outline-none focus:border-pink-500"
+                    placeholder="パスコード"
+                  />
+                </div>
+
+                <div className="flex gap-4">
+                  <button
+                    onClick={() => {
+                      if (adminPassword === '1234') {
+                        setIsAdmin(true);
+                        setAdminPassword('');
+                        setShowAdminModal(false);
+                      } else {
+                        alert('パスコードが違います');
+                        setAdminPassword('');
+                      }
+                    }}
+                    className="flex-1 px-6 py-3 bg-gradient-to-r from-pink-400 to-pink-500 text-white rounded-full font-bold shadow-lg hover:shadow-2xl transition"
+                  >
+                    認証
+                  </button>
+                  <button
+                    onClick={() => {
+                      if (isAdmin) {
+                        setIsAdmin(false);
+                      }
                       setShowAdminModal(false);
-                    } else {
-                      alert('パスコードが違います');
                       setAdminPassword('');
-                    }
-                  }}
-                  className="flex-1 px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 transition font-semibold"
-                >
-                  認証
-                </button>
-                <button
-                  onClick={() => {
-                    if (isAdmin) {
-                      setIsAdmin(false);
-                    }
-                    setShowAdminModal(false);
-                    setAdminPassword('');
-                  }}
-                  className="flex-1 px-4 py-2 bg-gray-300 text-gray-800 rounded-md hover:bg-gray-400"
-                >
-                  {isAdmin ? 'ログアウト' : 'キャンセル'}
-                </button>
+                    }}
+                    className="flex-1 px-6 py-3 bg-gray-300 text-gray-800 rounded-full font-bold hover:bg-gray-400 transition"
+                  >
+                    {isAdmin ? 'ログアウト' : 'キャンセル'}
+                  </button>
+                </div>
               </div>
             </div>
-          </div>
-        )}
+          )}
 
-        {showDeleteConfirm && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-            <div className="bg-white rounded-lg p-6 max-w-md w-full shadow-lg">
-              <h3 className="text-xl font-semibold mb-4 text-red-600">レースを削除しますか？</h3>
-              <p className="text-gray-700 mb-6">
-                この操作は取り消せません。本当に削除してもよろしいですか？
-              </p>
-              
-              <div className="flex gap-3">
-                <button
-                  onClick={() => deleteRace(raceToDelete)}
-                  className="flex-1 px-4 py-2 bg-red-500 text-white rounded-md hover:bg-red-600 transition font-semibold"
-                >
-                  削除する
-                </button>
-                <button
-                  onClick={() => {
-                    setShowDeleteConfirm(false);
-                    setRaceToDelete(null);
-                  }}
-                  className="flex-1 px-4 py-2 bg-gray-300 text-gray-800 rounded-md hover:bg-gray-400"
-                >
-                  キャンセル
-                </button>
+          {/* モーダル: 削除確認 */}
+          {showDeleteConfirm && (
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+              <div className="bg-white rounded-3xl p-8 max-w-md w-full shadow-2xl">
+                <h3 className="text-2xl font-bold mb-4 text-red-600">レースを削除しますか？</h3>
+                <p className="text-gray-700 mb-6 font-bold">
+                  この操作は取り消せません。本当に削除してもよろしいですか？
+                </p>
+                
+                <div className="flex gap-4">
+                  <button
+                    onClick={() => deleteRace(raceToDelete)}
+                    className="flex-1 px-6 py-3 bg-red-500 text-white rounded-full font-bold shadow-lg hover:shadow-2xl transition"
+                  >
+                    削除する
+                  </button>
+                  <button
+                    onClick={() => {
+                      setShowDeleteConfirm(false);
+                      setRaceToDelete(null);
+                    }}
+                    className="flex-1 px-6 py-3 bg-gray-300 text-gray-800 rounded-full font-bold hover:bg-gray-400"
+                  >
+                    キャンセル
+                  </button>
+                </div>
               </div>
             </div>
-          </div>
-        )}
+          )}
+        </div>
       </div>
     );
   }
@@ -916,445 +930,452 @@ const HorseAnalysisApp = () => {
   const resultsWithRate = calculateWinRate(currentRace.horses, raceSelectedCourse);
 
   return (
-    <div className="w-full max-w-6xl mx-auto p-6 bg-gray-50 min-h-screen">
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-800">{currentRace.name}</h1>
-          <p className="text-sm text-gray-600 mt-1">
-            {currentRace.createdAt} · {currentRace.horses.length}頭
-            {raceSelectedCourse && ` · ${raceSelectedCourse}`}
-            {/* 🆕 EXP係数表示 */}
-            {` · EXP係数: ${expCoefficient}`}
-          </p>
-        </div>
-        <button
-          onClick={() => setCurrentRace(null)}
-          className="px-4 py-2 bg-gray-400 text-white rounded-md hover:bg-gray-500"
-        >
-          ← 戻る
-        </button>
-      </div>
-
-      {currentRace.result && (
-        <div className="bg-green-100 border border-green-300 rounded-lg p-4 mb-6">
-          <h3 className="font-semibold text-green-800 mb-2">結果記録済み</h3>
-          <p className="text-sm text-green-700">着順: {currentRace.result.ranking}</p>
-        </div>
-      )}
-
-      <div className="bg-white rounded-lg p-6 shadow-lg mb-6">
-        <div className="flex justify-between items-center mb-4">
-          <h2 className="text-lg font-semibold text-gray-700">ファクター選択</h2>
-        </div>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6 p-4 bg-gray-50 rounded">
-          {Object.entries(selectedFactors).map(([factorKey, isSelected]) => (
-            <label key={factorKey} className="flex items-center gap-2 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={isSelected}
-                onChange={() => handleFactorToggle(factorKey)}
-                className="w-4 h-4"
-              />
-              <span className="text-sm font-medium text-gray-700">{factorKey}</span>
-            </label>
-          ))}
-        </div>
-      </div>
-
-      <div className="bg-white rounded-lg p-6 shadow-lg mb-6">
-        <div className="flex justify-between items-center mb-4">
+    <div className="w-full min-h-screen bg-gradient-to-br from-pink-100 via-purple-50 to-blue-100 p-6">
+      <div className="max-w-6xl mx-auto">
+        {/* ヘッダー */}
+        <div className="flex items-center justify-between mb-8 bg-white rounded-3xl p-6 shadow-lg border-2 border-pink-200">
           <div>
-            <h2 className="text-lg font-semibold text-gray-700">勝率ランキング</h2>
-            {raceSelectedCourse && (
-              <p className="text-xs text-gray-500 mt-1">コース設定: {raceSelectedCourse}</p>
-            )}
+            <h1 className="text-4xl font-black bg-gradient-to-r from-pink-500 to-purple-500 bg-clip-text text-transparent">
+              {currentRace.name}
+            </h1>
+            <p className="text-gray-600 mt-2 font-bold">
+              {currentRace.createdAt} · {currentRace.horses.length}頭
+              {raceSelectedCourse && ` · ${raceSelectedCourse}`}
+              {` · EXP係数: ${expCoefficient}`}
+            </p>
           </div>
-          <div className="flex gap-3 flex-wrap">
-            {isAdmin && (
-              <button
-                onClick={() => setShowCourseSelectModal(true)}
-                className="px-4 py-2 bg-purple-500 text-white rounded-md hover:bg-purple-600 font-semibold text-sm"
-              >
-                コース設定変更
-              </button>
-            )}
-            {isAdmin && (
+          <button
+            onClick={() => setCurrentRace(null)}
+            className="px-6 py-3 bg-gray-400 text-white rounded-full font-bold hover:bg-gray-500 hover:scale-105 transition transform shadow-lg"
+          >
+            ← 戻る
+          </button>
+        </div>
+
+        {/* 結果済み表示 */}
+        {currentRace.result && (
+          <div className="bg-gradient-to-r from-green-100 to-green-200 border-2 border-green-400 rounded-3xl p-6 mb-6 shadow-lg">
+            <h3 className="font-bold text-green-800 mb-2 text-lg">✅ 結果記録済み</h3>
+            <p className="font-bold text-green-700">着順: {currentRace.result.ranking}</p>
+          </div>
+        )}
+
+        {/* ファクター選択 */}
+        <div className="bg-white rounded-3xl p-6 shadow-lg mb-6 border-2 border-pink-200">
+          <h2 className="text-xl font-bold text-gray-700 mb-4">ファクター選択</h2>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 p-4 bg-gradient-to-br from-pink-50 to-purple-50 rounded-2xl">
+            {Object.entries(selectedFactors).map(([factorKey, isSelected]) => (
+              <label key={factorKey} className="flex items-center gap-2 cursor-pointer p-2 hover:bg-white rounded-lg transition">
+                <input
+                  type="checkbox"
+                  checked={isSelected}
+                  onChange={() => handleFactorToggle(factorKey)}
+                  className="w-5 h-5 accent-pink-500"
+                />
+                <span className="text-sm font-bold text-gray-700">{factorKey}</span>
+              </label>
+            ))}
+          </div>
+        </div>
+
+        {/* 勝率ランキング */}
+        <div className="bg-white rounded-3xl p-6 shadow-lg mb-6 border-2 border-purple-200">
+          <div className="flex justify-between items-start mb-6">
+            <div>
+              <h2 className="text-2xl font-bold text-gray-700">勝率ランキング</h2>
+              {raceSelectedCourse && (
+                <p className="text-xs text-gray-600 mt-1 font-bold">コース設定: {raceSelectedCourse}</p>
+              )}
+            </div>
+            <div className="flex gap-2 flex-wrap justify-end">
+              {isAdmin && (
+                <button
+                  onClick={() => setShowCourseSelectModal(true)}
+                  className="px-4 py-2 bg-gradient-to-r from-purple-400 to-purple-500 text-white rounded-full font-bold text-sm shadow-lg hover:shadow-2xl hover:scale-105 transition transform"
+                >
+                  コース変更
+                </button>
+              )}
+              {isAdmin && (
+                <button
+                  onClick={() => {
+                    setTempExpCoefficient(expCoefficient);
+                    setShowExpModal(true);
+                  }}
+                  className="px-4 py-2 bg-gradient-to-r from-indigo-400 to-indigo-500 text-white rounded-full font-bold text-sm shadow-lg hover:shadow-2xl hover:scale-105 transition transform"
+                >
+                  EXP設定
+                </button>
+              )}
+              {isAdmin && (
+                <button
+                  onClick={() => setShowExcludeModal(true)}
+                  className="px-4 py-2 bg-gradient-to-r from-red-400 to-red-500 text-white rounded-full font-bold text-sm shadow-lg hover:shadow-2xl hover:scale-105 transition transform"
+                >
+                  馬を除外
+                </button>
+              )}
               <button
                 onClick={() => {
-                  setTempExpCoefficient(expCoefficient);
-                  setShowExpModal(true);
+                  setOddsInput(currentRace.odds || {});
+                  setShowOddsModal(true);
                 }}
-                className="px-4 py-2 bg-indigo-500 text-white rounded-md hover:bg-indigo-600 font-semibold text-sm"
+                className="px-4 py-2 bg-gradient-to-r from-orange-400 to-orange-500 text-white rounded-full font-bold text-sm shadow-lg hover:shadow-2xl hover:scale-105 transition transform"
               >
-                EXP設定
+                オッズ入力
               </button>
-            )}
-            {isAdmin && (
-              <button
-                onClick={() => setShowExcludeModal(true)}
-                className="px-4 py-2 bg-red-500 text-white rounded-md hover:bg-red-600 font-semibold text-sm"
-              >
-                馬を除外
-              </button>
-            )}
-            <button
-              onClick={() => {
-                setOddsInput(currentRace.odds || {});
-                setShowOddsModal(true);
-              }}
-              className="px-4 py-2 bg-orange-500 text-white rounded-md hover:bg-orange-600 font-semibold"
-            >
-              オッズを入力
-            </button>
-            {isAdmin && (
-              <button
-                onClick={() => setShowResultModal(true)}
-                className="px-4 py-2 bg-green-500 text-white rounded-md hover:bg-green-600 font-semibold"
-              >
-                結果を記録
-              </button>
-            )}
+              {isAdmin && (
+                <button
+                  onClick={() => setShowResultModal(true)}
+                  className="px-4 py-2 bg-gradient-to-r from-green-400 to-green-500 text-white rounded-full font-bold text-sm shadow-lg hover:shadow-2xl hover:scale-105 transition transform"
+                >
+                  結果記録
+                </button>
+              )}
+            </div>
           </div>
-        </div>
-        <div className="space-y-2">
-          {resultsWithRate.map((horse, idx) => {
-            const odds = oddsInput[horse.horseNum] || 0;
-            const value = odds * horse.winRate;
-            const isGoodValue = horse.winRate >= 10 && value >= 150;
-            
-            return (
-              <div
-                key={horse.horseNum}
-                className={`p-4 rounded-lg border-2 ${
-                  isGoodValue && odds > 0 
-                    ? 'bg-yellow-200 border-yellow-400' 
-                    : idx === 0 ? 'bg-yellow-100 border-yellow-300' : 'bg-white border-gray-200'
-                }`}
-              >
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-4 flex-1">
-                    <div className="text-2xl font-bold text-gray-700 min-w-12">
-                      {idx + 1}位
+
+          <div className="space-y-3">
+            {resultsWithRate.map((horse, idx) => {
+              const odds = oddsInput[horse.horseNum] || 0;
+              const value = odds * horse.winRate;
+              const isGoodValue = horse.winRate >= 10 && value >= 150;
+              
+              return (
+                <div
+                  key={horse.horseNum}
+                  className={`p-4 rounded-2xl border-2 transition ${
+                    isGoodValue && odds > 0 
+                      ? 'bg-yellow-200 border-yellow-400' 
+                      : idx === 0 ? 'bg-gradient-to-r from-pink-200 to-purple-200 border-pink-400' : 'bg-white border-gray-200'
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-4 flex-1">
+                      <div className="text-3xl font-black text-gray-700 min-w-16 text-center">
+                        {idx + 1}位
+                      </div>
+                      <div>
+                        <div className="text-lg font-bold text-gray-800">
+                          {horse.horseNum}. {horse.name}
+                        </div>
+                        {odds > 0 && (
+                          <div className="text-xs text-gray-600 mt-1 font-bold">
+                            オッズ {odds.toFixed(1)} × 勝率 {horse.winRate.toFixed(1)}% = {value.toFixed(0)}
+                          </div>
+                        )}
+                      </div>
                     </div>
-                    <div>
-                      <div className="text-lg font-bold text-gray-800">
-                        {horse.horseNum}. {horse.name}
+                    <div className="text-right">
+                      <div className="text-3xl font-black bg-gradient-to-r from-pink-600 to-purple-600 bg-clip-text text-transparent">
+                        {horse.winRate.toFixed(1)}%
                       </div>
                       {odds > 0 && (
-                        <div className="text-xs text-gray-600 mt-1">
-                          オッズ {odds.toFixed(1)} × 勝率 {horse.winRate.toFixed(1)}% = {value.toFixed(0)}
+                        <div className={`text-sm font-bold mt-1 ${isGoodValue ? 'text-yellow-700' : 'text-gray-600'}`}>
+                          {isGoodValue ? '💎期待値馬！' : ''}
                         </div>
                       )}
                     </div>
                   </div>
-                  <div className="text-right">
-                    <div className="text-3xl font-bold text-blue-600">
-                      {horse.winRate.toFixed(1)}%
-                    </div>
-                    {odds > 0 && (
-                      <div className={`text-sm font-semibold mt-1 ${isGoodValue ? 'text-yellow-700' : 'text-gray-600'}`}>
-                        {isGoodValue ? '期待値馬！' : ''}
+                </div>
+              );
+            })}
+
+            {/* 除外馬表示 */}
+            {Object.keys(excludedHorses).length > 0 && (
+              <div className="mt-6 pt-4 border-t-2 border-gray-300">
+                <p className="text-sm text-gray-600 mb-3 font-bold">🚫 除外対象：</p>
+                <div className="space-y-2">
+                  {currentRace.horses
+                    .filter(horse => excludedHorses[horse.horseNum])
+                    .sort((a, b) => a.horseNum - b.horseNum)
+                    .map((horse) => (
+                      <div
+                        key={horse.horseNum}
+                        className="p-3 bg-gray-400 rounded-2xl border-2 border-gray-500 opacity-50"
+                      >
+                        <div className="flex items-center gap-4">
+                          <div className="text-lg font-bold text-white">
+                            {horse.horseNum}. {horse.name}
+                          </div>
+                          <div className="text-sm font-bold text-white">
+                            【除外】
+                          </div>
+                        </div>
                       </div>
-                    )}
-                  </div>
+                    ))}
                 </div>
               </div>
-            );
-          })}
-          
-          {/* 🆕 除外された馬を表示 */}
-          {Object.keys(excludedHorses).length > 0 && (
-            <div className="mt-4 pt-4 border-t border-gray-300">
-              <p className="text-sm text-gray-600 mb-2 font-semibold">除外対象：</p>
-              <div className="space-y-2">
-                {currentRace.horses
-                  .filter(horse => excludedHorses[horse.horseNum])
-                  .sort((a, b) => a.horseNum - b.horseNum)
-                  .map((horse) => (
-                    <div
-                      key={horse.horseNum}
-                      className="p-3 bg-gray-300 rounded-lg border-2 border-gray-400 opacity-60"
-                    >
-                      <div className="flex items-center gap-4">
-                        <div className="text-lg font-bold text-gray-700">
-                          {horse.horseNum}. {horse.name}
-                        </div>
-                        <div className="text-sm font-semibold text-gray-700">
-                          【除外】
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-              </div>
-            </div>
-          )}
+            )}
+          </div>
         </div>
-      </div>
 
-      <div className="bg-white rounded-lg p-6 shadow-lg mb-6">
-        <div className="flex justify-between items-center mb-4">
-          <h2 className="text-lg font-semibold text-gray-700">メモ</h2>
-          {isAdmin && (
-            <button
-              onClick={() => setShowMemoModal(true)}
-              className="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 font-semibold text-sm"
-            >
-              編集
-            </button>
-          )}
-        </div>
-        <div className="p-4 bg-gray-50 rounded border border-gray-200 min-h-32">
-          <p className="text-gray-700 whitespace-pre-wrap">{memo || '（メモなし）'}</p>
-        </div>
-      </div>
-
-      {showCourseSelectModal && isAdmin && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg p-6 max-w-md w-full shadow-lg">
-            <h3 className="text-lg font-semibold mb-4 text-gray-800">コース設定を選択</h3>
-            
-            <div className="space-y-2 mb-6">
+        {/* メモ */}
+        <div className="bg-white rounded-3xl p-6 shadow-lg border-2 border-blue-200">
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-xl font-bold text-gray-700">📝 メモ</h2>
+            {isAdmin && (
               <button
-                onClick={() => {
-                  setRaceSelectedCourse(null);
-                  setShowCourseSelectModal(false);
-                }}
-                className={`w-full px-4 py-2 rounded-md text-left font-semibold transition ${
-                  raceSelectedCourse === null
-                    ? 'bg-blue-500 text-white'
-                    : 'bg-gray-100 text-gray-800 hover:bg-gray-200'
-                }`}
+                onClick={() => setShowMemoModal(true)}
+                className="px-4 py-2 bg-gradient-to-r from-blue-400 to-blue-500 text-white rounded-full font-bold text-sm shadow-lg hover:shadow-2xl transition"
               >
-                デフォルト設定
+                編集
               </button>
-              {Object.keys(courseSettings).map(name => (
+            )}
+          </div>
+          <div className="p-4 bg-gradient-to-br from-blue-50 to-purple-50 rounded-2xl border-2 border-blue-200 min-h-32">
+            <p className="text-gray-700 whitespace-pre-wrap font-bold">{memo || '（メモなし）'}</p>
+          </div>
+        </div>
+
+        {/* 各種モーダル */}
+        {showCourseSelectModal && isAdmin && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+            <div className="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl">
+              <h3 className="text-xl font-bold mb-6 text-gray-800">コース設定を選択</h3>
+              
+              <div className="space-y-3 mb-6">
                 <button
-                  key={name}
                   onClick={() => {
-                    setRaceSelectedCourse(name);
+                    setRaceSelectedCourse(null);
                     setShowCourseSelectModal(false);
                   }}
-                  className={`w-full px-4 py-2 rounded-md text-left font-semibold transition ${
-                    raceSelectedCourse === name
-                      ? 'bg-blue-500 text-white'
+                  className={`w-full px-4 py-3 rounded-full text-left font-bold transition ${
+                    raceSelectedCourse === null
+                      ? 'bg-gradient-to-r from-purple-400 to-purple-500 text-white'
                       : 'bg-gray-100 text-gray-800 hover:bg-gray-200'
                   }`}
                 >
-                  {name}
+                  デフォルト設定
                 </button>
-              ))}
+                {Object.keys(courseSettings).map(name => (
+                  <button
+                    key={name}
+                    onClick={() => {
+                      setRaceSelectedCourse(name);
+                      setShowCourseSelectModal(false);
+                    }}
+                    className={`w-full px-4 py-3 rounded-full text-left font-bold transition ${
+                      raceSelectedCourse === name
+                        ? 'bg-gradient-to-r from-purple-400 to-purple-500 text-white'
+                        : 'bg-gray-100 text-gray-800 hover:bg-gray-200'
+                    }`}
+                  >
+                    {name}
+                  </button>
+                ))}
+              </div>
+
+              <button
+                onClick={() => setShowCourseSelectModal(false)}
+                className="w-full px-4 py-3 bg-gray-300 text-gray-800 rounded-full font-bold hover:bg-gray-400 transition"
+              >
+                キャンセル
+              </button>
             </div>
-
-            <button
-              onClick={() => setShowCourseSelectModal(false)}
-              className="w-full px-4 py-2 bg-gray-300 text-gray-800 rounded-md hover:bg-gray-400"
-            >
-              キャンセル
-            </button>
           </div>
-        </div>
-      )}
+        )}
 
-      {/* 🆕 EXP係数設定モーダル */}
-      {showExpModal && isAdmin && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg p-6 max-w-md w-full shadow-lg">
-            <h3 className="text-lg font-semibold mb-4 text-gray-800">EXP係数を調整</h3>
-            
-            <div className="mb-6">
-              <label className="block text-sm font-medium text-gray-600 mb-3">
-                係数: {tempExpCoefficient.toFixed(2)}
-              </label>
-              <input
-                type="range"
-                min="0.01"
-                max="0.5"
-                step="0.01"
-                value={tempExpCoefficient}
-                onChange={(e) => setTempExpCoefficient(parseFloat(e.target.value))}
-                className="w-full"
-              />
-              <div className="flex justify-between text-xs text-gray-500 mt-2">
-                <span>0.01（最も均等）</span>
-                <span>0.5（最も敏感）</span>
+        {showExpModal && isAdmin && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+            <div className="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl">
+              <h3 className="text-xl font-bold mb-6 text-gray-800">EXP係数を調整</h3>
+              
+              <div className="mb-6">
+                <label className="block text-sm font-bold text-gray-700 mb-4">
+                  係数: {tempExpCoefficient.toFixed(2)}
+                </label>
+                <input
+                  type="range"
+                  min="0.01"
+                  max="0.5"
+                  step="0.01"
+                  value={tempExpCoefficient}
+                  onChange={(e) => setTempExpCoefficient(parseFloat(e.target.value))}
+                  className="w-full h-3 bg-gradient-to-r from-pink-400 to-purple-500 rounded-full appearance-none cursor-pointer"
+                />
+                <div className="flex justify-between text-xs text-gray-600 mt-3 font-bold">
+                  <span>均等</span>
+                  <span>敏感</span>
+                </div>
+              </div>
+
+              <div className="mb-6 p-4 bg-purple-100 rounded-2xl text-sm text-purple-800 font-bold border-2 border-purple-300">
+                <p>📍 低い値: 各馬の勝率がより均等</p>
+                <p>📍 高い値: トップ馬との差が顕著</p>
+              </div>
+
+              <div className="flex gap-4">
+                <button
+                  onClick={saveExpCoefficient}
+                  className="flex-1 px-4 py-3 bg-gradient-to-r from-purple-400 to-purple-500 text-white rounded-full font-bold shadow-lg hover:shadow-2xl transition"
+                >
+                  保存
+                </button>
+                <button
+                  onClick={() => setShowExpModal(false)}
+                  className="flex-1 px-4 py-3 bg-gray-300 text-gray-800 rounded-full font-bold hover:bg-gray-400 transition"
+                >
+                  キャンセル
+                </button>
               </div>
             </div>
+          </div>
+        )}
 
-            <div className="mb-4 p-3 bg-blue-100 rounded text-sm text-blue-800">
-              <p>低い値: 各馬の勝率がより均等</p>
-              <p>高い値: トップ馬との差が顕著</p>
-            </div>
+        {showExcludeModal && isAdmin && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+            <div className="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl max-h-96 overflow-y-auto">
+              <h3 className="text-xl font-bold mb-6 text-gray-800">馬を除外（出走取り消しなど）</h3>
+              
+              <div className="space-y-3 mb-6">
+                {currentRace.horses.sort((a, b) => a.horseNum - b.horseNum).map((horse) => (
+                  <label key={horse.horseNum} className="flex items-center gap-3 p-3 hover:bg-pink-50 rounded-2xl cursor-pointer transition">
+                    <input
+                      type="checkbox"
+                      checked={!!excludedHorses[horse.horseNum]}
+                      onChange={() => toggleExcludeHorse(horse.horseNum)}
+                      className="w-5 h-5 accent-red-500"
+                    />
+                    <span className="text-sm font-bold text-gray-700">
+                      {horse.horseNum}. {horse.name}
+                    </span>
+                  </label>
+                ))}
+              </div>
 
-            <div className="flex gap-3">
-              <button
-                onClick={saveExpCoefficient}
-                className="flex-1 px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 font-semibold text-sm"
-              >
-                保存
-              </button>
-              <button
-                onClick={() => setShowExpModal(false)}
-                className="flex-1 px-4 py-2 bg-gray-400 text-white rounded-md hover:bg-gray-500 text-sm"
-              >
-                キャンセル
-              </button>
+              <div className="flex gap-4">
+                <button
+                  onClick={saveExcludeSettings}
+                  className="flex-1 px-4 py-3 bg-gradient-to-r from-red-400 to-red-500 text-white rounded-full font-bold shadow-lg hover:shadow-2xl transition"
+                >
+                  保存
+                </button>
+                <button
+                  onClick={() => setShowExcludeModal(false)}
+                  className="flex-1 px-4 py-3 bg-gray-400 text-white rounded-full font-bold hover:bg-gray-500 transition"
+                >
+                  キャンセル
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )}
 
-      {showExcludeModal && isAdmin && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg p-6 max-w-md w-full shadow-lg max-h-96 overflow-y-auto">
-            <h3 className="text-lg font-semibold mb-4 text-gray-800">馬を除外（出走取り消しなど）</h3>
-            
-            <div className="space-y-2 mb-6">
-              {currentRace.horses.sort((a, b) => a.horseNum - b.horseNum).map((horse) => (
-                <label key={horse.horseNum} className="flex items-center gap-3 p-2 hover:bg-gray-50 rounded cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={!!excludedHorses[horse.horseNum]}
-                    onChange={() => toggleExcludeHorse(horse.horseNum)}
-                    className="w-4 h-4"
-                  />
-                  <span className="text-sm text-gray-700">
-                    {horse.horseNum}. {horse.name}
-                  </span>
-                </label>
-              ))}
-            </div>
-
-            <div className="flex gap-3">
-              <button
-                onClick={saveExcludeSettings}
-                className="flex-1 px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 font-semibold text-sm"
-              >
-                保存
-              </button>
-              <button
-                onClick={() => setShowExcludeModal(false)}
-                className="flex-1 px-4 py-2 bg-gray-400 text-white rounded-md hover:bg-gray-500 text-sm"
-              >
-                キャンセル
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {showMemoModal && isAdmin && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg p-6 max-w-md w-full shadow-lg">
-            <h3 className="text-lg font-semibold mb-4 text-gray-800">メモを編集</h3>
-            
-            <textarea
-              value={memo}
-              onChange={(e) => setMemo(e.target.value)}
-              className="w-full h-48 p-3 border border-gray-300 rounded-md font-mono text-sm mb-4"
-              placeholder="見解、印、買い目など..."
-            />
-
-            <div className="flex gap-3">
-              <button
-                onClick={() => {
-                  updateRaceMemo(memo);
-                  setShowMemoModal(false);
-                }}
-                className="flex-1 px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 font-semibold"
-              >
-                保存
-              </button>
-              <button
-                onClick={() => setShowMemoModal(false)}
-                className="flex-1 px-4 py-2 bg-gray-300 text-gray-800 rounded-md hover:bg-gray-400"
-              >
-                キャンセル
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {showOddsModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg p-6 max-w-md w-full shadow-lg max-h-96 overflow-y-auto">
-            <h3 className="text-lg font-semibold mb-4 text-gray-800">オッズを入力</h3>
-            
-            <div className="space-y-2 mb-6">
-              {currentRace.horses.sort((a, b) => a.horseNum - b.horseNum).map((horse) => (
-                <div key={horse.horseNum} className="flex items-center gap-2">
-                  <label className="text-xs text-gray-700 w-32">{horse.horseNum}. {horse.name}</label>
-                  <input
-                    type="number"
-                    step="0.1"
-                    value={oddsInput[horse.horseNum] || ''}
-                    onChange={(e) => setOddsInput({...oddsInput, [horse.horseNum]: parseFloat(e.target.value) || 0})}
-                    className="flex-1 px-2 py-1 border border-gray-300 rounded text-xs"
-                    placeholder="オッズ"
-                  />
-                </div>
-              ))}
-            </div>
-
-            <div className="flex gap-3">
-              <button
-                onClick={() => {
-                  updateRaceOdds(oddsInput);
-                  setShowOddsModal(false);
-                }}
-                className="flex-1 px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 font-semibold text-sm"
-              >
-                保存
-              </button>
-              <button
-                onClick={() => setShowOddsModal(false)}
-                className="flex-1 px-4 py-2 bg-gray-400 text-white rounded-md hover:bg-gray-500 text-sm"
-              >
-                キャンセル
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {showResultModal && isAdmin && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg p-6 max-w-md w-full shadow-lg">
-            <h3 className="text-xl font-semibold mb-4 text-gray-800">着順を記録</h3>
-            
-            <div className="mb-6">
-              <label className="text-sm font-medium text-gray-600 mb-2 block">着順を馬番で入力</label>
-              <p className="text-xs text-gray-500 mb-3">例：8-15-5</p>
-              <input
-                type="text"
-                value={resultRanking}
-                onChange={(e) => setResultRanking(e.target.value)}
-                className="w-full px-3 py-2 border border-blue-300 rounded-md text-sm"
-                placeholder="8-15-5"
-                autoFocus
+        {showMemoModal && isAdmin && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+            <div className="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl">
+              <h3 className="text-xl font-bold mb-6 text-gray-800">メモを編集</h3>
+              
+              <textarea
+                value={memo}
+                onChange={(e) => setMemo(e.target.value)}
+                className="w-full h-48 p-4 border-2 border-blue-300 rounded-2xl font-mono text-sm mb-6 focus:outline-none focus:border-blue-500"
+                placeholder="見解、印、買い目など..."
               />
-            </div>
 
-            <div className="flex gap-3">
-              <button
-                onClick={handleSaveResult}
-                className="flex-1 px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 font-semibold"
-              >
-                保存
-              </button>
-              <button
-                onClick={() => {
-                  setShowResultModal(false);
-                  setResultRanking('');
-                }}
-                className="flex-1 px-4 py-2 bg-gray-300 text-gray-800 rounded-md hover:bg-gray-400"
-              >
-                キャンセル
-              </button>
+              <div className="flex gap-4">
+                <button
+                  onClick={() => {
+                    updateRaceMemo(memo);
+                    setShowMemoModal(false);
+                  }}
+                  className="flex-1 px-4 py-3 bg-gradient-to-r from-blue-400 to-blue-500 text-white rounded-full font-bold shadow-lg hover:shadow-2xl transition"
+                >
+                  保存
+                </button>
+                <button
+                  onClick={() => setShowMemoModal(false)}
+                  className="flex-1 px-4 py-3 bg-gray-300 text-gray-800 rounded-full font-bold hover:bg-gray-400 transition"
+                >
+                  キャンセル
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )}
+
+        {showOddsModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+            <div className="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl max-h-96 overflow-y-auto">
+              <h3 className="text-xl font-bold mb-6 text-gray-800">オッズを入力</h3>
+              
+              <div className="space-y-3 mb-6">
+                {currentRace.horses.sort((a, b) => a.horseNum - b.horseNum).map((horse) => (
+                  <div key={horse.horseNum} className="flex items-center gap-3">
+                    <label className="text-xs font-bold text-gray-700 w-32">{horse.horseNum}. {horse.name}</label>
+                    <input
+                      type="number"
+                      step="0.1"
+                      value={oddsInput[horse.horseNum] || ''}
+                      onChange={(e) => setOddsInput({...oddsInput, [horse.horseNum]: parseFloat(e.target.value) || 0})}
+                      className="flex-1 px-3 py-2 border-2 border-orange-300 rounded-lg text-xs focus:outline-none focus:border-orange-500"
+                      placeholder="オッズ"
+                    />
+                  </div>
+                ))}
+              </div>
+
+              <div className="flex gap-4">
+                <button
+                  onClick={() => {
+                    updateRaceOdds(oddsInput);
+                    setShowOddsModal(false);
+                  }}
+                  className="flex-1 px-4 py-3 bg-gradient-to-r from-orange-400 to-orange-500 text-white rounded-full font-bold shadow-lg hover:shadow-2xl transition"
+                >
+                  保存
+                </button>
+                <button
+                  onClick={() => setShowOddsModal(false)}
+                  className="flex-1 px-4 py-3 bg-gray-400 text-white rounded-full font-bold hover:bg-gray-500 transition"
+                >
+                  キャンセル
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {showResultModal && isAdmin && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+            <div className="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl">
+              <h3 className="text-2xl font-bold mb-6 text-gray-800">着順を記録</h3>
+              
+              <div className="mb-6">
+                <label className="text-sm font-bold text-gray-700 mb-3 block">着順を馬番で入力</label>
+                <p className="text-xs text-gray-600 mb-4 font-bold">例：8-15-5</p>
+                <input
+                  type="text"
+                  value={resultRanking}
+                  onChange={(e) => setResultRanking(e.target.value)}
+                  className="w-full px-4 py-3 border-2 border-green-300 rounded-2xl text-sm focus:outline-none focus:border-green-500 font-bold"
+                  placeholder="8-15-5"
+                  autoFocus
+                />
+              </div>
+
+              <div className="flex gap-4">
+                <button
+                  onClick={handleSaveResult}
+                  className="flex-1 px-4 py-3 bg-gradient-to-r from-green-400 to-green-500 text-white rounded-full font-bold shadow-lg hover:shadow-2xl transition"
+                >
+                  保存
+                </button>
+                <button
+                  onClick={() => {
+                    setShowResultModal(false);
+                    setResultRanking('');
+                  }}
+                  className="flex-1 px-4 py-3 bg-gray-300 text-gray-800 rounded-full font-bold hover:bg-gray-400 transition"
+                >
+                  キャンセル
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 };
