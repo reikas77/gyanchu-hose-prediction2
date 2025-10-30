@@ -441,7 +441,7 @@ const HorseAnalysisApp = () => {
             
             bets.push({
               type: '馬連',
-              horses: [`${top1.horseNum}-${flowHorses.map(h => h.horseNum).join('')}`],
+              horses: [`${top1.horseNum}-${flowHorses.map(h => h.horseNum).join(',')}`],
               amount: perBet * flowCount,
               reason: `${top1.horseNum}番から勝率10%以上に各${perBet}円`
             });
@@ -466,7 +466,7 @@ const HorseAnalysisApp = () => {
             
             bets.push({
               type: '馬連',
-              horses: [`${top1.horseNum}-${flowHorses.map(h => h.horseNum).join('')}`],
+              horses: [`${top1.horseNum}-${flowHorses.map(h => h.horseNum).join(',')}`],
               amount: perBet * flowCount,
               reason: `${top1.horseNum}番から勝率10%以上に各${perBet}円`
             });
@@ -482,7 +482,7 @@ const HorseAnalysisApp = () => {
               
               bets.push({
                 type: '三連複',
-                horses: [`${top1.horseNum}-${use10.map(h => h.horseNum).join('')}-${use5.map(h => h.horseNum).join('')}`],
+                horses: [`${top1.horseNum}-${use10.map(h => h.horseNum).join(',')}-${use5.map(h => h.horseNum).join(',')}`],
                 amount: perBet * combinations,
                 reason: `フォーメーション ${combinations}点 各${perBet}円`
               });
@@ -542,7 +542,7 @@ const HorseAnalysisApp = () => {
             
             bets.push({
               type: '馬連',
-              horses: [`${mainHorse.horseNum}-${flowHorses.map(h => h.horseNum).join('')}`],
+              horses: [`${mainHorse.horseNum}-${flowHorses.map(h => h.horseNum).join(',')}`],
               amount: perBet * flowCount,
               reason: `${mainHorse.horseNum}番から勝率10%以上に各${perBet}円`
             });
@@ -569,7 +569,7 @@ const HorseAnalysisApp = () => {
             
             bets.push({
               type: '馬連',
-              horses: [`${mainHorse.horseNum}-${flowHorses.map(h => h.horseNum).join('')}`],
+              horses: [`${mainHorse.horseNum}-${flowHorses.map(h => h.horseNum).join(',')}`],
               amount: perBet * flowCount,
               reason: `${mainHorse.horseNum}番から勝率10%以上に各${perBet}円`
             });
@@ -585,7 +585,7 @@ const HorseAnalysisApp = () => {
               
               bets.push({
                 type: '三連複',
-                horses: [`${mainHorse.horseNum}-${use10.map(h => h.horseNum).join('')}-${use5.map(h => h.horseNum).join('')}`],
+                horses: [`${mainHorse.horseNum}-${use10.map(h => h.horseNum).join(',')}-${use5.map(h => h.horseNum).join(',')}`],
                 amount: perBet * combinations,
                 reason: `フォーメーション ${combinations}点 各${perBet}円`
               });
