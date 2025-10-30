@@ -406,12 +406,10 @@ const HorseAnalysisApp = () => {
     const bets = [];
 
     if (bettingType === 'accuracy') {
-      // 的中率特化型
+      // 的中率特化型：勝率1位馬
       const top1 = resultsWithRate[0];
-      const aiRec = calculateAIRecommendation(resultsWithRate);
-      const mainHorse = aiRec || top1; // AIおすすめ馬があればそちらを優先
       
-      if (!mainHorse) {
+      if (!top1) {
         bets.push({
           type: '情報',
           horses: [],
@@ -419,8 +417,10 @@ const HorseAnalysisApp = () => {
           reason: '購入可能な馬が見つかりませんでした'
         });
       } else {
-        // 勝率10%以上の馬を取得
-        const winRate10Plus = resultsWithRate.filter(h => h.winRate >= 10 && h.horseNum !== mainHorse.horseNum);
+        // 勝率10%以上の馬を取得（軸馬を除く）
+        const winRate10Plus = resultsWithRate.filter(h => h.winRate >= 10 && h.horseNum !== top1.horseNum);
+        // 勝率5%以上の馬を取得（軸馬を除く）
+        const winRate5Plus = resultsWithRate.filter(h => h.winRate >= 5 && h.horseNum !== top1.horseNum);
         
         if (budget <= 3000) {
           // ~3000円: 単勝 > 馬連
@@ -429,20 +429,21 @@ const HorseAnalysisApp = () => {
           
           bets.push({
             type: '単勝',
-            horses: [`${mainHorse.horseNum}. ${mainHorse.name}`],
+            horses: [`${top1.horseNum}`],
             amount: tanAmount,
-            reason: aiRec ? 'AIおすすめ馬（勝率重視）' : '勝率1位馬'
+            reason: `勝率1位馬（勝率${top1.winRate.toFixed(1)}%）`
           });
           
           if (barenAmount >= 100 && winRate10Plus.length > 0) {
             const flowCount = Math.min(winRate10Plus.length, Math.floor(barenAmount / 100));
             const perBet = Math.floor(barenAmount / flowCount / 100) * 100;
+            const flowHorses = winRate10Plus.slice(0, flowCount);
             
             bets.push({
               type: '馬連',
-              horses: [`${mainHorse.horseNum}. ${mainHorse.name}`, `→ 勝率10%以上の${flowCount}頭に流し`],
+              horses: [`${top1.horseNum}-${flowHorses.map(h => h.horseNum).join('')}`],
               amount: perBet * flowCount,
-              reason: `${mainHorse.horseNum}番から勝率10%以上に各${perBet}円`
+              reason: `${top1.horseNum}番から勝率10%以上に各${perBet}円`
             });
           }
         } else {
@@ -453,25 +454,25 @@ const HorseAnalysisApp = () => {
           
           bets.push({
             type: '単勝',
-            horses: [`${mainHorse.horseNum}. ${mainHorse.name}`],
+            horses: [`${top1.horseNum}`],
             amount: tanAmount,
-            reason: aiRec ? 'AIおすすめ馬（勝率重視）' : '勝率1位馬'
+            reason: `勝率1位馬（勝率${top1.winRate.toFixed(1)}%）`
           });
           
           if (barenAmount >= 100 && winRate10Plus.length > 0) {
             const flowCount = Math.min(winRate10Plus.length, Math.floor(barenAmount / 100));
             const perBet = Math.floor(barenAmount / flowCount / 100) * 100;
+            const flowHorses = winRate10Plus.slice(0, flowCount);
             
             bets.push({
               type: '馬連',
-              horses: [`${mainHorse.horseNum}. ${mainHorse.name}`, `→ 勝率10%以上の${flowCount}頭に流し`],
+              horses: [`${top1.horseNum}-${flowHorses.map(h => h.horseNum).join('')}`],
               amount: perBet * flowCount,
-              reason: `${mainHorse.horseNum}番から勝率10%以上に各${perBet}円`
+              reason: `${top1.horseNum}番から勝率10%以上に各${perBet}円`
             });
           }
           
           if (sanrenAmount >= 100) {
-            const winRate5Plus = resultsWithRate.filter(h => h.winRate >= 5 && h.horseNum !== mainHorse.horseNum);
             const use10 = winRate10Plus.slice(0, Math.min(3, winRate10Plus.length));
             const use5 = winRate5Plus.slice(0, Math.min(3, winRate5Plus.length));
             
@@ -481,7 +482,7 @@ const HorseAnalysisApp = () => {
               
               bets.push({
                 type: '三連複',
-                horses: [`${mainHorse.horseNum}. ${mainHorse.name}`, `勝率10%以上${use10.length}頭`, `勝率5%以上${use5.length}頭`],
+                horses: [`${top1.horseNum}-${use10.map(h => h.horseNum).join('')}-${use5.map(h => h.horseNum).join('')}`],
                 amount: perBet * combinations,
                 reason: `フォーメーション ${combinations}点 各${perBet}円`
               });
@@ -490,7 +491,7 @@ const HorseAnalysisApp = () => {
         }
       }
     } else if (bettingType === 'value') {
-      // 回収率特化型
+      // 回収率特化型：期待値馬または超期待値馬
       const expectationHorses = resultsWithRate
         .map(horse => {
           const odds = oddsInput[horse.horseNum] || 0;
@@ -502,17 +503,23 @@ const HorseAnalysisApp = () => {
       
       // 超期待値馬（220以上）があればそちらを優先
       const superExpHorses = expectationHorses.filter(h => h.expectation >= 220);
-      const mainHorse = superExpHorses.length > 0 ? superExpHorses[0] : expectationHorses[0];
+      let mainHorse = superExpHorses.length > 0 ? superExpHorses[0] : expectationHorses[0];
+      
+      // 期待値馬がいない場合はAIおすすめ馬を使用
+      if (!mainHorse) {
+        mainHorse = calculateAIRecommendation(resultsWithRate);
+      }
       
       if (!mainHorse) {
         bets.push({
           type: '情報',
           horses: [],
           amount: 0,
-          reason: '期待値150以上の馬が見つかりませんでした'
+          reason: '期待値馬・AIおすすめ馬が見つかりませんでした'
         });
       } else {
         const winRate10Plus = resultsWithRate.filter(h => h.winRate >= 10 && h.horseNum !== mainHorse.horseNum);
+        const winRate5Plus = resultsWithRate.filter(h => h.winRate >= 5 && h.horseNum !== mainHorse.horseNum);
         
         if (budget <= 3000) {
           // ~3000円: 単勝 > 馬連
@@ -521,18 +528,21 @@ const HorseAnalysisApp = () => {
           
           bets.push({
             type: '単勝',
-            horses: [`${mainHorse.horseNum}. ${mainHorse.name}`],
+            horses: [`${mainHorse.horseNum}`],
             amount: tanAmount,
-            reason: `期待値${mainHorse.expectation.toFixed(0)}（オッズ${mainHorse.odds.toFixed(1)}倍）`
+            reason: mainHorse.expectation >= 150 
+              ? `期待値${mainHorse.expectation.toFixed(0)}（オッズ${mainHorse.odds.toFixed(1)}倍）`
+              : `AIおすすめ馬（勝率${mainHorse.winRate.toFixed(1)}%）`
           });
           
           if (barenAmount >= 100 && winRate10Plus.length > 0) {
             const flowCount = Math.min(winRate10Plus.length, Math.floor(barenAmount / 100));
             const perBet = Math.floor(barenAmount / flowCount / 100) * 100;
+            const flowHorses = winRate10Plus.slice(0, flowCount);
             
             bets.push({
               type: '馬連',
-              horses: [`${mainHorse.horseNum}. ${mainHorse.name}`, `→ 勝率10%以上の${flowCount}頭に流し`],
+              horses: [`${mainHorse.horseNum}-${flowHorses.map(h => h.horseNum).join('')}`],
               amount: perBet * flowCount,
               reason: `${mainHorse.horseNum}番から勝率10%以上に各${perBet}円`
             });
@@ -545,25 +555,27 @@ const HorseAnalysisApp = () => {
           
           bets.push({
             type: '単勝',
-            horses: [`${mainHorse.horseNum}. ${mainHorse.name}`],
+            horses: [`${mainHorse.horseNum}`],
             amount: tanAmount,
-            reason: `期待値${mainHorse.expectation.toFixed(0)}（オッズ${mainHorse.odds.toFixed(1)}倍）`
+            reason: mainHorse.expectation >= 150 
+              ? `期待値${mainHorse.expectation.toFixed(0)}（オッズ${mainHorse.odds.toFixed(1)}倍）`
+              : `AIおすすめ馬（勝率${mainHorse.winRate.toFixed(1)}%）`
           });
           
           if (barenAmount >= 100 && winRate10Plus.length > 0) {
             const flowCount = Math.min(winRate10Plus.length, Math.floor(barenAmount / 100));
             const perBet = Math.floor(barenAmount / flowCount / 100) * 100;
+            const flowHorses = winRate10Plus.slice(0, flowCount);
             
             bets.push({
               type: '馬連',
-              horses: [`${mainHorse.horseNum}. ${mainHorse.name}`, `→ 勝率10%以上の${flowCount}頭に流し`],
+              horses: [`${mainHorse.horseNum}-${flowHorses.map(h => h.horseNum).join('')}`],
               amount: perBet * flowCount,
               reason: `${mainHorse.horseNum}番から勝率10%以上に各${perBet}円`
             });
           }
           
           if (sanrenAmount >= 100) {
-            const winRate5Plus = resultsWithRate.filter(h => h.winRate >= 5 && h.horseNum !== mainHorse.horseNum);
             const use10 = winRate10Plus.slice(0, Math.min(3, winRate10Plus.length));
             const use5 = winRate5Plus.slice(0, Math.min(3, winRate5Plus.length));
             
@@ -573,7 +585,7 @@ const HorseAnalysisApp = () => {
               
               bets.push({
                 type: '三連複',
-                horses: [`${mainHorse.horseNum}. ${mainHorse.name}`, `勝率10%以上${use10.length}頭`, `勝率5%以上${use5.length}頭`],
+                horses: [`${mainHorse.horseNum}-${use10.map(h => h.horseNum).join('')}-${use5.map(h => h.horseNum).join('')}`],
                 amount: perBet * combinations,
                 reason: `フォーメーション ${combinations}点 各${perBet}円`
               });
@@ -1763,11 +1775,16 @@ const HorseAnalysisApp = () => {
               <h3 className="text-2xl font-bold mb-6 text-gray-800">💰 買い目自動生成</h3>
               
               <div className="mb-6">
-                <label className="block text-sm font-bold text-gray-700 mb-3">予算を入力</label>
+                <label className="block text-sm font-bold text-gray-700 mb-3">予算を入力（100円単位）</label>
                 <input
                   type="number"
+                  step="100"
+                  min="100"
                   value={bettingBudget}
-                  onChange={(e) => setBettingBudget(parseInt(e.target.value) || 0)}
+                  onChange={(e) => {
+                    const value = parseInt(e.target.value) || 0;
+                    setBettingBudget(Math.round(value / 100) * 100);
+                  }}
                   className="w-full px-4 py-3 border-2 border-cyan-300 rounded-2xl text-sm focus:outline-none focus:border-cyan-500 font-bold"
                   placeholder="1000"
                 />
@@ -1822,7 +1839,7 @@ const HorseAnalysisApp = () => {
                         </div>
                         {bet.horses.length > 0 && (
                           <div className="text-sm text-gray-700 font-bold mb-1">
-                            {bet.horses.join(' - ')}
+                            {bet.horses.join(' ')}
                           </div>
                         )}
                         <div className="text-xs text-gray-600 font-bold">
