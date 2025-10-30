@@ -46,7 +46,7 @@ const HorseAnalysisApp = () => {
   const [selectedCourse, setSelectedCourse] = useState(null);
   const [statsFilterCourse, setStatsFilterCourse] = useState(null);
   const [selectedFactors, setSelectedFactors] = useState({
-    'タイム指数': true,
+    'スピード能力値': true,
     'コース・距離適性': true,
     '展開利': true,
     '近走安定度': true,
@@ -163,7 +163,7 @@ const HorseAnalysisApp = () => {
       if (!numbers || numbers.length < 8) return;
 
       const scores = {
-        'タイム指数': parseFloat(numbers[0]) || 0,
+        'スピード能力値': parseFloat(numbers[0]) || 0,
         'コース・距離適性': parseFloat(numbers[1]) || 0,
         '展開利': parseFloat(numbers[2]) || 0,
         '近走安定度': parseFloat(numbers[3]) || 0,
@@ -334,7 +334,7 @@ const HorseAnalysisApp = () => {
     const horsesWithScores = activeHorses.map(horse => {
       let totalScore = 0;
       Object.keys(weights).forEach(factor => {
-        const factorKey = factor === '能力値' ? 'タイム指数' : factor;
+        const factorKey = factor === '能力値' ? 'スピード能力値' : factor;
         if (selectedFactors[factorKey]) {
           totalScore += (horse.scores[factorKey] || 0) * (weights[factor] / 100);
         }
@@ -539,7 +539,7 @@ const HorseAnalysisApp = () => {
                       : 'bg-gray-200 text-gray-800 hover:bg-gray-300'
                   }`}
                 >
-                  来週の予想
+                  未出走の予想
                 </button>
                 <button
                   onClick={() => setActiveTab('races-past')}
@@ -941,7 +941,7 @@ const HorseAnalysisApp = () => {
             <p className="text-gray-600 mt-2 font-bold">
               {currentRace.createdAt} · {currentRace.horses.length}頭
               {raceSelectedCourse && ` · ${raceSelectedCourse}`}
-              {` · EXP係数: ${expCoefficient}`}
+              {isAdmin && ` · EXP係数: ${expCoefficient}`}
             </p>
           </div>
           <button
