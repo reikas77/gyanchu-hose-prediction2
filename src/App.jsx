@@ -88,6 +88,13 @@ const HorseAnalysisApp = () => {
 
   const [statsType, setStatsType] = useState('winrate');
 
+  // 🔒 新規追加: パスコード関連のstate
+  const [racePasscode, setRacePasscode] = useState('');
+  const [showPasscodeModal, setShowPasscodeModal] = useState(false);
+  const [passcodeInput, setPasscodeInput] = useState('');
+  const [selectedLockedRace, setSelectedLockedRace] = useState(null);
+  const [passcodeError, setPasscodeError] = useState('');
+
   const factors = [
     { name: '能力値', weight: 15, key: 'タイム指数' },
     { name: 'コース・距離適性', weight: 18, key: 'コース・距離適性' },
@@ -198,6 +205,21 @@ const HorseAnalysisApp = () => {
       return;
     }
 
+    // 🔒 パスコードのバリデーション
+    if (racePasscode && racePasscode.length !== 6) {
+      setImportMessage('パスコードは6桁で入力してください');
+      setImportMessageType('error');
+      setTimeout(() => setImportMessage(''), 3000);
+      return;
+    }
+
+    if (racePasscode && !/^\d{6}$/.test(racePasscode)) {
+      setImportMessage('パスコードは数字6桁で入力してください');
+      setImportMessageType('error');
+      setTimeout(() => setImportMessage(''), 3000);
+      return;
+    }
+
     const horses = parseHorseData(pasteText);
     
     if (horses.length === 0) {
@@ -218,7 +240,8 @@ const HorseAnalysisApp = () => {
       excluded: {},
       expCoefficient: 0.1,
       createdBy: userId,
-      createdTime: new Date().toISOString()
+      createdTime: new Date().toISOString(),
+      passcode: racePasscode || null // 🔒 パスコードを保存（nullの場合は誰でも閲覧可能）
     };
 
     const racesRef = ref(database, 'races');
@@ -226,7 +249,8 @@ const HorseAnalysisApp = () => {
 
     setPasteText('');
     setRaceName('');
-    setImportMessage(`${raceName}を追加しました！（${horses.length}頭）`);
+    setRacePasscode(''); // 🔒 パスコードもクリア
+    setImportMessage(`${raceName}を追加しました！（${horses.length}頭）${racePasscode ? ' 🔒パスコード設定済み' : ''}`);
     setImportMessageType('success');
     setTimeout(() => {
       setImportMessage('');
@@ -318,6 +342,50 @@ const HorseAnalysisApp = () => {
       expCoefficient: tempExpCoefficient
     });
     setShowExpModal(false);
+  };
+
+  // 🔒 パスコード認証処理
+  const handlePasscodeSubmit = () => {
+    if (!selectedLockedRace) return;
+
+    if (passcodeInput === selectedLockedRace.passcode) {
+      // 認証成功
+      setCurrentRace(selectedLockedRace);
+      setRaceSelectedCourse(selectedLockedRace.courseKey);
+      setMemo(selectedLockedRace.memo || '');
+      setOddsInput(selectedLockedRace.odds || {});
+      setExcludedHorses(selectedLockedRace.excluded || {});
+      setExpCoefficient(selectedLockedRace.expCoefficient || 0.1);
+      
+      // モーダルを閉じる
+      setShowPasscodeModal(false);
+      setPasscodeInput('');
+      setPasscodeError('');
+      setSelectedLockedRace(null);
+    } else {
+      // 認証失敗
+      setPasscodeError('パスコードが違います');
+      setPasscodeInput('');
+    }
+  };
+
+  // 🔒 レースクリック時の処理（パスコードチェック追加）
+  const handleRaceClick = (race) => {
+    if (race.passcode && !isAdmin) {
+      // パスコードが設定されていて、管理者でない場合は認証モーダルを表示
+      setSelectedLockedRace(race);
+      setShowPasscodeModal(true);
+      setPasscodeInput('');
+      setPasscodeError('');
+    } else {
+      // パスコードなし、または管理者の場合は直接表示
+      setCurrentRace(race);
+      setRaceSelectedCourse(race.courseKey);
+      setMemo(race.memo || '');
+      setOddsInput(race.odds || {});
+      setExcludedHorses(race.excluded || {});
+      setExpCoefficient(race.expCoefficient || 0.1);
+    }
   };
 
   const calculateWinRate = (horses, courseKey = null) => {
@@ -845,25 +913,23 @@ const HorseAnalysisApp = () => {
                   ).map((race) => (
                     <div
                       key={race.firebaseId}
-                      onClick={() => {
-                        setCurrentRace(race);
-                        setRaceSelectedCourse(race.courseKey);
-                        setMemo(race.memo || '');
-                        setOddsInput(race.odds || {});
-                        setExcludedHorses(race.excluded || {});
-                        setExpCoefficient(race.expCoefficient || 0.1);
-                      }}
+                      onClick={() => handleRaceClick(race)}
                       className="bg-gradient-to-br from-pink-50 to-purple-50 rounded-2xl md:rounded-3xl p-4 md:p-6 border-2 border-pink-200 hover:border-purple-400 cursor-pointer hover:shadow-lg transition shadow-md hover:scale-105 group"
                     >
                       <div className="flex items-start justify-between mb-3">
                         <div className="flex-1 min-w-0">
                           <h3 className="font-bold text-base md:text-lg text-gray-800 flex items-center gap-2 truncate">
-                            <span className="text-xl md:text-2xl flex-shrink-0">🏇</span>
+                            <span className="text-xl md:text-2xl flex-shrink-0">
+                              {race.passcode ? '🔒' : '🏇'}
+                            </span>
                             <span className="truncate">{race.name}</span>
                           </h3>
                           <p className="text-xs md:text-sm text-gray-600 mt-1 break-words">
                             {race.createdAt} · {race.horses.length}頭
                             {race.courseKey && ` · ${race.courseKey}`}
+                            {race.passcode && !isAdmin && (
+                              <span className="text-purple-600 font-bold"> · パスコード必要</span>
+                            )}
                           </p>
                         </div>
                         {isAdmin && (
@@ -1089,6 +1155,28 @@ const HorseAnalysisApp = () => {
                   </select>
                 </div>
 
+                {/* 🔒 パスコード入力欄を追加 */}
+                <div className="mb-6">
+                  <label className="block text-sm font-bold text-gray-700 mb-2 flex items-center gap-2">
+                    🔒 パスコード（オプション）
+                    <span className="text-xs text-gray-500 font-normal">※6桁の数字</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={racePasscode}
+                    onChange={(e) => {
+                      const value = e.target.value.replace(/\D/g, '').slice(0, 6);
+                      setRacePasscode(value);
+                    }}
+                    placeholder="例：123456（空欄=誰でも閲覧可）"
+                    maxLength={6}
+                    className="w-full px-4 py-3 border-2 border-purple-300 rounded-2xl focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-200 font-mono text-lg tracking-widest"
+                  />
+                  <p className="text-xs text-gray-600 mt-2">
+                    パスコードを設定すると、一般ユーザーは入力しないと閲覧できなくなります
+                  </p>
+                </div>
+
                 <div className="mb-6">
                   <label className="block text-sm font-bold text-gray-700 mb-2">データ（コピペ）</label>
                   <textarea
@@ -1111,8 +1199,76 @@ const HorseAnalysisApp = () => {
                       setShowUploadModal(false);
                       setPasteText('');
                       setRaceName('');
+                      setRacePasscode('');
                       setImportMessage('');
                       setSelectedCourse(null);
+                    }}
+                    className="flex-1 px-6 py-3 bg-gray-300 text-gray-800 rounded-full font-bold hover:bg-gray-400 transition"
+                  >
+                    キャンセル
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* 🔒 パスコード認証モーダル */}
+          {showPasscodeModal && (
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+              <div className="bg-white rounded-3xl p-8 max-w-md w-full shadow-2xl">
+                <div className="text-center mb-6">
+                  <div className="text-5xl mb-4">🔒</div>
+                  <h3 className="text-2xl font-bold text-gray-800">パスコードを入力</h3>
+                  <p className="text-sm text-gray-600 mt-2">
+                    このレースは保護されています
+                  </p>
+                </div>
+
+                {passcodeError && (
+                  <div className="p-3 bg-red-100 border-2 border-red-400 rounded-2xl mb-4 text-center">
+                    <p className="text-red-800 font-bold text-sm">{passcodeError}</p>
+                  </div>
+                )}
+
+                <div className="mb-6">
+                  <input
+                    type="text"
+                    value={passcodeInput}
+                    onChange={(e) => {
+                      const value = e.target.value.replace(/\D/g, '').slice(0, 6);
+                      setPasscodeInput(value);
+                      setPasscodeError('');
+                    }}
+                    onKeyPress={(e) => {
+                      if (e.key === 'Enter' && passcodeInput.length === 6) {
+                        handlePasscodeSubmit();
+                      }
+                    }}
+                    placeholder="6桁の数字"
+                    maxLength={6}
+                    autoFocus
+                    className="w-full px-4 py-4 border-2 border-purple-300 rounded-2xl focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-200 font-mono text-2xl tracking-widest text-center"
+                  />
+                </div>
+
+                <div className="flex gap-4">
+                  <button
+                    onClick={handlePasscodeSubmit}
+                    disabled={passcodeInput.length !== 6}
+                    className={`flex-1 px-6 py-3 rounded-full font-bold shadow-lg transition ${
+                      passcodeInput.length === 6
+                        ? 'bg-gradient-to-r from-purple-400 to-purple-500 text-white hover:shadow-2xl hover:scale-105'
+                        : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                    }`}
+                  >
+                    認証
+                  </button>
+                  <button
+                    onClick={() => {
+                      setShowPasscodeModal(false);
+                      setPasscodeInput('');
+                      setPasscodeError('');
+                      setSelectedLockedRace(null);
                     }}
                     className="flex-1 px-6 py-3 bg-gray-300 text-gray-800 rounded-full font-bold hover:bg-gray-400 transition"
                   >
