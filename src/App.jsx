@@ -469,10 +469,10 @@ const HorseAnalysisApp = () => {
           {/* ヘッダー */}
           <div className="flex justify-between items-center mb-8">
             <div className="text-center flex-1">
-              <h1 className="text-5xl font-black bg-gradient-to-r from-pink-500 to-purple-500 bg-clip-text text-transparent mb-2">
-                🐴 競馬予想分析ツール
+              <h1 className="text-4xl md:text-5xl font-black bg-gradient-to-r from-pink-500 to-purple-500 bg-clip-text text-transparent mb-2">
+                🐴 ギャン中の予想部屋
               </h1>
-              <p className="text-gray-600 text-lg">あなたの競馬ライフをもっと楽しく✨</p>
+              <p className="text-gray-600 text-base md:text-lg">期待値のある馬を探して競馬ライフをもっと楽しく✨</p>
             </div>
             <button
               onClick={() => setShowAdminModal(true)}
@@ -483,10 +483,10 @@ const HorseAnalysisApp = () => {
           </div>
 
           {/* タブボタン */}
-          <div className="flex gap-4 mb-8 flex-wrap justify-center">
+          <div className="flex gap-2 md:gap-4 mb-8 flex-wrap justify-center">
             <button
               onClick={() => setActiveTab('races-upcoming')}
-              className={`px-8 py-3 rounded-full font-bold shadow-lg hover:shadow-2xl hover:scale-105 transition transform ${
+              className={`px-4 md:px-8 py-2 md:py-3 rounded-full font-bold text-sm md:text-base shadow-lg hover:shadow-2xl hover:scale-105 transition transform ${
                 activeTab === 'races-upcoming' || activeTab === 'races-past'
                   ? 'bg-gradient-to-r from-pink-400 to-pink-500 text-white'
                   : 'bg-white text-gray-700 hover:bg-gray-100'
@@ -496,7 +496,7 @@ const HorseAnalysisApp = () => {
             </button>
             <button
               onClick={() => setActiveTab('settings')}
-              className={`px-8 py-3 rounded-full font-bold shadow-lg hover:shadow-2xl hover:scale-105 transition transform ${
+              className={`px-4 md:px-8 py-2 md:py-3 rounded-full font-bold text-sm md:text-base shadow-lg hover:shadow-2xl hover:scale-105 transition transform ${
                 activeTab === 'settings'
                   ? 'bg-gradient-to-r from-purple-400 to-purple-500 text-white'
                   : 'bg-white text-gray-700 hover:bg-gray-100'
@@ -507,7 +507,7 @@ const HorseAnalysisApp = () => {
             </button>
             <button
               onClick={() => setActiveTab('stats')}
-              className={`px-8 py-3 rounded-full font-bold shadow-lg hover:shadow-2xl hover:scale-105 transition transform ${
+              className={`px-4 md:px-8 py-2 md:py-3 rounded-full font-bold text-sm md:text-base shadow-lg hover:shadow-2xl hover:scale-105 transition transform ${
                 activeTab === 'stats'
                   ? 'bg-gradient-to-r from-blue-400 to-blue-500 text-white'
                   : 'bg-white text-gray-700 hover:bg-gray-100'
@@ -557,7 +557,7 @@ const HorseAnalysisApp = () => {
               </div>
 
               {races.length > 0 ? (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4">
                   {(activeTab === 'races-upcoming' 
                     ? races.filter(r => !r.result)
                     : races.filter(r => r.result)
@@ -572,15 +572,15 @@ const HorseAnalysisApp = () => {
                         setExcludedHorses(race.excluded || {});
                         setExpCoefficient(race.expCoefficient || 0.1);
                       }}
-                      className="bg-gradient-to-br from-pink-50 to-purple-50 rounded-3xl p-6 border-2 border-pink-200 hover:border-purple-400 cursor-pointer hover:shadow-lg transition shadow-md hover:scale-105 group"
+                      className="bg-gradient-to-br from-pink-50 to-purple-50 rounded-2xl md:rounded-3xl p-4 md:p-6 border-2 border-pink-200 hover:border-purple-400 cursor-pointer hover:shadow-lg transition shadow-md hover:scale-105 group"
                     >
                       <div className="flex items-start justify-between mb-3">
-                        <div>
-                          <h3 className="font-bold text-lg text-gray-800 flex items-center gap-2">
-                            <span className="text-2xl">🏇</span>
-                            {race.name}
+                        <div className="flex-1 min-w-0">
+                          <h3 className="font-bold text-base md:text-lg text-gray-800 flex items-center gap-2 truncate">
+                            <span className="text-xl md:text-2xl flex-shrink-0">🏇</span>
+                            <span className="truncate">{race.name}</span>
                           </h3>
-                          <p className="text-sm text-gray-600 mt-1">
+                          <p className="text-xs md:text-sm text-gray-600 mt-1 break-words">
                             {race.createdAt} · {race.horses.length}頭
                             {race.courseKey && ` · ${race.courseKey}`}
                           </p>
@@ -592,7 +592,7 @@ const HorseAnalysisApp = () => {
                               setRaceToDelete(race.firebaseId);
                               setShowDeleteConfirm(true);
                             }}
-                            className="p-2 text-red-500 hover:bg-red-50 rounded-full opacity-0 group-hover:opacity-100 transition"
+                            className="p-2 text-red-500 hover:bg-red-50 rounded-full opacity-0 group-hover:opacity-100 transition flex-shrink-0"
                             title="削除"
                           >
                             🗑️
@@ -600,16 +600,16 @@ const HorseAnalysisApp = () => {
                         )}
                       </div>
                       {race.result && (
-                        <div className="flex items-center gap-2">
-                          <span className="text-sm font-bold text-gray-700">結果: {race.result.ranking}</span>
-                          {race.result?.fukusho === 'hit' && <span className="text-lg">✅</span>}
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-xs md:text-sm font-bold text-gray-700">結果: {race.result.ranking}</span>
+                          {race.result?.fukusho === 'hit' && <span className="text-base md:text-lg">✅</span>}
                         </div>
                       )}
                     </div>
                   ))}
                 </div>
               ) : (
-                <p className="text-gray-500 text-center py-12 text-lg">レースデータがまだありません</p>
+                <p className="text-gray-500 text-center py-12 text-base md:text-lg">レースデータがまだありません</p>
               )}
             </div>
           )}
@@ -933,12 +933,12 @@ const HorseAnalysisApp = () => {
     <div className="w-full min-h-screen bg-gradient-to-br from-pink-100 via-purple-50 to-blue-100 p-6">
       <div className="max-w-6xl mx-auto">
         {/* ヘッダー */}
-        <div className="flex items-center justify-between mb-8 bg-white rounded-3xl p-6 shadow-lg border-2 border-pink-200">
-          <div>
-            <h1 className="text-4xl font-black bg-gradient-to-r from-pink-500 to-purple-500 bg-clip-text text-transparent">
+        <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 mb-8 bg-white rounded-3xl p-4 md:p-6 shadow-lg border-2 border-pink-200">
+          <div className="flex-1 min-w-0">
+            <h1 className="text-2xl md:text-4xl font-black bg-gradient-to-r from-pink-500 to-purple-500 bg-clip-text text-transparent break-words">
               {currentRace.name}
             </h1>
-            <p className="text-gray-600 mt-2 font-bold">
+            <p className="text-xs md:text-base text-gray-600 mt-2 font-bold break-words">
               {currentRace.createdAt} · {currentRace.horses.length}頭
               {raceSelectedCourse && ` · ${raceSelectedCourse}`}
               {isAdmin && ` · EXP係数: ${expCoefficient}`}
@@ -946,7 +946,7 @@ const HorseAnalysisApp = () => {
           </div>
           <button
             onClick={() => setCurrentRace(null)}
-            className="px-6 py-3 bg-gray-400 text-white rounded-full font-bold hover:bg-gray-500 hover:scale-105 transition transform shadow-lg"
+            className="w-full md:w-auto px-4 md:px-6 py-2 md:py-3 bg-gray-400 text-white rounded-full font-bold hover:bg-gray-500 hover:scale-105 transition transform shadow-lg text-sm md:text-base"
           >
             ← 戻る
           </button>
@@ -961,37 +961,37 @@ const HorseAnalysisApp = () => {
         )}
 
         {/* ファクター選択 */}
-        <div className="bg-white rounded-3xl p-6 shadow-lg mb-6 border-2 border-pink-200">
-          <h2 className="text-xl font-bold text-gray-700 mb-4">ファクター選択</h2>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 p-4 bg-gradient-to-br from-pink-50 to-purple-50 rounded-2xl">
+        <div className="bg-white rounded-3xl p-4 md:p-6 shadow-lg mb-6 border-2 border-pink-200">
+          <h2 className="text-lg md:text-xl font-bold text-gray-700 mb-4">ファクター選択</h2>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3 p-3 md:p-4 bg-gradient-to-br from-pink-50 to-purple-50 rounded-2xl">
             {Object.entries(selectedFactors).map(([factorKey, isSelected]) => (
-              <label key={factorKey} className="flex items-center gap-2 cursor-pointer p-2 hover:bg-white rounded-lg transition">
+              <label key={factorKey} className="flex items-center gap-2 cursor-pointer p-2 hover:bg-white rounded-lg transition text-xs md:text-sm">
                 <input
                   type="checkbox"
                   checked={isSelected}
                   onChange={() => handleFactorToggle(factorKey)}
-                  className="w-5 h-5 accent-pink-500"
+                  className="w-4 h-4 md:w-5 md:h-5 accent-pink-500"
                 />
-                <span className="text-sm font-bold text-gray-700">{factorKey}</span>
+                <span className="font-bold text-gray-700">{factorKey}</span>
               </label>
             ))}
           </div>
         </div>
 
         {/* 勝率ランキング */}
-        <div className="bg-white rounded-3xl p-6 shadow-lg mb-6 border-2 border-purple-200">
-          <div className="flex justify-between items-start mb-6">
+        <div className="bg-white rounded-3xl p-4 md:p-6 shadow-lg mb-6 border-2 border-purple-200">
+          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3 mb-6">
             <div>
-              <h2 className="text-2xl font-bold text-gray-700">勝率ランキング</h2>
+              <h2 className="text-xl md:text-2xl font-bold text-gray-700">勝率ランキング</h2>
               {raceSelectedCourse && (
-                <p className="text-xs text-gray-600 mt-1 font-bold">コース設定: {raceSelectedCourse}</p>
+                <p className="text-xs md:text-sm text-gray-600 mt-1 font-bold">コース設定: {raceSelectedCourse}</p>
               )}
             </div>
-            <div className="flex gap-2 flex-wrap justify-end">
+            <div className="flex gap-2 flex-wrap justify-start md:justify-end w-full md:w-auto">
               {isAdmin && (
                 <button
                   onClick={() => setShowCourseSelectModal(true)}
-                  className="px-4 py-2 bg-gradient-to-r from-purple-400 to-purple-500 text-white rounded-full font-bold text-sm shadow-lg hover:shadow-2xl hover:scale-105 transition transform"
+                  className="px-3 md:px-4 py-1 md:py-2 bg-gradient-to-r from-purple-400 to-purple-500 text-white rounded-full font-bold text-xs md:text-sm shadow-lg hover:shadow-2xl hover:scale-105 transition transform whitespace-nowrap"
                 >
                   コース変更
                 </button>
@@ -1002,7 +1002,7 @@ const HorseAnalysisApp = () => {
                     setTempExpCoefficient(expCoefficient);
                     setShowExpModal(true);
                   }}
-                  className="px-4 py-2 bg-gradient-to-r from-indigo-400 to-indigo-500 text-white rounded-full font-bold text-sm shadow-lg hover:shadow-2xl hover:scale-105 transition transform"
+                  className="px-3 md:px-4 py-1 md:py-2 bg-gradient-to-r from-indigo-400 to-indigo-500 text-white rounded-full font-bold text-xs md:text-sm shadow-lg hover:shadow-2xl hover:scale-105 transition transform whitespace-nowrap"
                 >
                   EXP設定
                 </button>
@@ -1010,7 +1010,7 @@ const HorseAnalysisApp = () => {
               {isAdmin && (
                 <button
                   onClick={() => setShowExcludeModal(true)}
-                  className="px-4 py-2 bg-gradient-to-r from-red-400 to-red-500 text-white rounded-full font-bold text-sm shadow-lg hover:shadow-2xl hover:scale-105 transition transform"
+                  className="px-3 md:px-4 py-1 md:py-2 bg-gradient-to-r from-red-400 to-red-500 text-white rounded-full font-bold text-xs md:text-sm shadow-lg hover:shadow-2xl hover:scale-105 transition transform whitespace-nowrap"
                 >
                   馬を除外
                 </button>
@@ -1020,14 +1020,14 @@ const HorseAnalysisApp = () => {
                   setOddsInput(currentRace.odds || {});
                   setShowOddsModal(true);
                 }}
-                className="px-4 py-2 bg-gradient-to-r from-orange-400 to-orange-500 text-white rounded-full font-bold text-sm shadow-lg hover:shadow-2xl hover:scale-105 transition transform"
+                className="px-3 md:px-4 py-1 md:py-2 bg-gradient-to-r from-orange-400 to-orange-500 text-white rounded-full font-bold text-xs md:text-sm shadow-lg hover:shadow-2xl hover:scale-105 transition transform whitespace-nowrap"
               >
                 オッズ入力
               </button>
               {isAdmin && (
                 <button
                   onClick={() => setShowResultModal(true)}
-                  className="px-4 py-2 bg-gradient-to-r from-green-400 to-green-500 text-white rounded-full font-bold text-sm shadow-lg hover:shadow-2xl hover:scale-105 transition transform"
+                  className="px-3 md:px-4 py-1 md:py-2 bg-gradient-to-r from-green-400 to-green-500 text-white rounded-full font-bold text-xs md:text-sm shadow-lg hover:shadow-2xl hover:scale-105 transition transform whitespace-nowrap"
                 >
                   結果記録
                 </button>
