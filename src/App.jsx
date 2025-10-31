@@ -2136,9 +2136,9 @@ const HorseAnalysisApp = () => {
           <div className="p-4 bg-gradient-to-br from-blue-50 to-purple-50 rounded-2xl border-2 border-blue-200 min-h-32">
   {memo ? (
     <div 
-      className="text-gray-700 font-bold"
-      dangerouslySetInnerHTML={{ __html: memo }}
-    />
+  className="text-gray-700 font-bold whitespace-pre-wrap"
+  dangerouslySetInnerHTML={{ __html: memo }}
+/>
   ) : (
     <p className="text-gray-500 font-bold">（メモなし）</p>
   )}
@@ -2367,11 +2367,17 @@ const HorseAnalysisApp = () => {
 <div
   ref={(el) => {
     if (el && !el.innerHTML && memo) {
-      el.innerHTML = memo;
+      el.innerHTML = memo.replace(/\n/g, '<br>');
     }
   }}
   contentEditable
   onInput={(e) => setMemo(e.currentTarget.innerHTML)}
+  onKeyDown={(e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      document.execCommand('insertHTML', false, '<br><br>');
+    }
+  }}
   className="w-full min-h-48 p-4 border-2 border-blue-300 rounded-2xl text-sm mb-6 focus:outline-none focus:border-blue-500 bg-white overflow-y-auto max-h-96"
   style={{ whiteSpace: 'pre-wrap' }}
   suppressContentEditableWarning
