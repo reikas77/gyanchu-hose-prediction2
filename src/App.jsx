@@ -128,15 +128,23 @@ const HorseAnalysisApp = () => {
       if (user) {
         setUserId(user.uid);
         
-        // バージョンチェック
+        // バージョンチェック（古いバージョンを完全にブロック）
         const versionRef = ref(database, 'appVersion');
         onValue(versionRef, snapshot => {
           const serverVersion = snapshot.val();
           if (serverVersion && serverVersion !== APP_VERSION) {
-            // サーバーのバージョンが異なる場合、リロードを促す
-            if (window.confirm('新しいバージョンが利用可能です。ページを更新しますか？')) {
-              window.location.reload(true);
-            }
+            // バージョンが違う場合、データアクセスをブロック
+            alert('⚠️ アプリが古いバージョンです\n\n最新版を使用するため、ページを更新してください。\n\n更新方法：\n・Ctrl+Shift+R (Windows)\n・Cmd+Shift+R (Mac)');
+            
+            // 定期的にアラートを表示して更新を促す
+            const interval = setInterval(() => {
+              alert('⚠️ このバージョンは使用できません\n\nページを更新してください');
+            }, 10000); // 10秒ごと
+            
+            // データの読み込みを停止
+            setIsLoading(false);
+            setRaces([]);
+            return;
           }
         });
         
