@@ -3,6 +3,122 @@ import { initializeApp } from 'firebase/app';
 import { getDatabase, ref, set, remove, onValue, push } from 'firebase/database';
 import { getAuth, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
 
+// ═══════════════════════════════════════════
+// 🎨 ドット絵コンポーネント
+// ═══════════════════════════════════════════
+
+const HorsePixelArt = ({ size = 24 }) => (
+  <svg width={size} height={size} viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+    {/* 頭 */}
+    <rect x="2" y="6" width="2" height="2" fill="#8B4513" />
+    <rect x="4" y="6" width="2" height="2" fill="#8B4513" />
+    {/* 耳 */}
+    <rect x="6" y="4" width="2" height="2" fill="#A0522D" />
+    <rect x="8" y="4" width="2" height="2" fill="#A0522D" />
+    {/* 体 */}
+    <rect x="3" y="8" width="10" height="4" fill="#D2691E" />
+    {/* 脚 */}
+    <rect x="4" y="12" width="2" height="3" fill="#8B4513" />
+    <rect x="10" y="12" width="2" height="3" fill="#8B4513" />
+    {/* 目 */}
+    <circle cx="5" cy="6" r="1" fill="#FFD700" />
+  </svg>
+);
+
+const CrownPixelArt = ({ size = 24 }) => (
+  <svg width={size} height={size} viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+    {/* ベース */}
+    <rect x="2" y="10" width="12" height="2" fill="#FFD700" />
+    {/* スパイク左 */}
+    <rect x="3" y="6" width="2" height="4" fill="#FFD700" />
+    {/* スパイク中央 */}
+    <rect x="7" y="4" width="2" height="6" fill="#FFD700" />
+    {/* スパイク右 */}
+    <rect x="11" y="6" width="2" height="4" fill="#FFD700" />
+    {/* 宝石 */}
+    <circle cx="4" cy="5" r="1" fill="#FF69B4" />
+    <circle cx="8" cy="3" r="1" fill="#FF69B4" />
+    <circle cx="12" cy="5" r="1" fill="#FF69B4" />
+  </svg>
+);
+
+const MedalPixelArt = ({ size = 24 }) => (
+  <svg width={size} height={size} viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+    {/* 金メダル */}
+    <circle cx="4" cy="6" r="3" fill="#FFD700" />
+    {/* 銀メダル */}
+    <circle cx="12" cy="6" r="3" fill="#C0C0C0" />
+    {/* 銅メダル */}
+    <circle cx="8" cy="4" r="3" fill="#CD7F32" />
+    {/* リボン */}
+    <rect x="3" y="9" width="2" height="4" fill="#FF69B4" />
+    <rect x="11" y="9" width="2" height="4" fill="#FF69B4" />
+    <rect x="7" y="9" width="2" height="5" fill="#FF69B4" />
+  </svg>
+);
+
+const StarPixelArt = ({ size = 24 }) => (
+  <svg width={size} height={size} viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <rect x="7" y="1" width="2" height="2" fill="#FFD700" />
+    <rect x="5" y="3" width="2" height="2" fill="#FFD700" />
+    <rect x="9" y="3" width="2" height="2" fill="#FFD700" />
+    <rect x="3" y="5" width="2" height="2" fill="#FFD700" />
+    <rect x="7" y="5" width="2" height="2" fill="#FFD700" />
+    <rect x="11" y="5" width="2" height="2" fill="#FFD700" />
+    <rect x="5" y="7" width="2" height="2" fill="#FFD700" />
+    <rect x="9" y="7" width="2" height="2" fill="#FFD700" />
+    <rect x="7" y="9" width="2" height="2" fill="#FFD700" />
+  </svg>
+);
+
+const LockPixelArt = ({ size = 24 }) => (
+  <svg width={size} height={size} viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+    {/* 錠前本体 */}
+    <rect x="3" y="8" width="10" height="6" fill="#8B4513" />
+    {/* 錠前カギ部 */}
+    <rect x="5" y="4" width="6" height="4" fill="#A0522D" stroke="#8B4513" strokeWidth="1" />
+    {/* 鍵穴 */}
+    <circle cx="8" cy="11" r="1" fill="#FFD700" />
+    <rect x="7" y="6" width="2" height="2" fill="#FFD700" />
+  </svg>
+);
+
+const HeartPixelArt = ({ size = 24 }) => (
+  <svg width={size} height={size} viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+    {/* ハート */}
+    <circle cx="5" cy="4" r="2" fill="#FF1493" />
+    <circle cx="11" cy="4" r="2" fill="#FF1493" />
+    <rect x="3" y="6" width="10" height="8" fill="#FF1493" />
+    <rect x="4" y="8" width="2" height="4" fill="#FFB6C1" />
+    <rect x="10" y="8" width="2" height="4" fill="#FFB6C1" />
+  </svg>
+);
+
+const BarPixelArt = ({ size = 24 }) => (
+  <svg width={size} height={size} viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+    {/* グラフ棒 */}
+    <rect x="2" y="12" width="2" height="2" fill="#FF69B4" />
+    <rect x="5" y="8" width="2" height="6" fill="#FF69B4" />
+    <rect x="8" y="5" width="2" height="9" fill="#FF69B4" />
+    <rect x="11" y="10" width="2" height="4" fill="#FF69B4" />
+  </svg>
+);
+
+const TrophyPixelArt = ({ size = 24 }) => (
+  <svg width={size} height={size} viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+    {/* 持ち手左 */}
+    <rect x="2" y="4" width="2" height="6" fill="#FFD700" />
+    {/* トロフィー本体 */}
+    <rect x="6" y="2" width="4" height="8" fill="#FFD700" />
+    {/* 持ち手右 */}
+    <rect x="12" y="4" width="2" height="6" fill="#FFD700" />
+    {/* ベース */}
+    <rect x="5" y="10" width="6" height="2" fill="#FFD700" />
+    {/* 台 */}
+    <rect x="4" y="12" width="8" height="2" fill="#CD7F32" />
+  </svg>
+);
+
 // Firebase設定
 const firebaseConfig = {
   apiKey: "AIzaSyBLXleQ28dQR-uDTKlYXSevefzc0vowh9k",
@@ -102,7 +218,7 @@ const HorseAnalysisApp = () => {
 
   const [statsType, setStatsType] = useState('winrate');
 
-  // 🔒 新規追加: パスコード関連のstate
+  // 🔒 パスコード関連のstate
   const [racePasscode, setRacePasscode] = useState('');
   const [showPasscodeModal, setShowPasscodeModal] = useState(false);
   const [passcodeInput, setPasscodeInput] = useState('');
@@ -841,6 +957,9 @@ const HorseAnalysisApp = () => {
     return (
       <div className="w-full min-h-screen bg-gradient-to-br from-pink-100 via-purple-50 to-blue-100 flex items-center justify-center">
         <div className="text-center">
+          <div className="flex justify-center mb-4">
+            <HorsePixelArt size={48} />
+          </div>
           <p className="text-gray-700 font-semibold mb-4 text-lg">読み込み中...</p>
           <div className="animate-spin rounded-full h-12 w-12 border-4 border-purple-300 border-t-purple-600 mx-auto"></div>
         </div>
@@ -854,9 +973,13 @@ const HorseAnalysisApp = () => {
         <div className="max-w-4xl mx-auto">
           <div className="flex justify-between items-center mb-8">
             <div className="text-center flex-1">
-              <h1 className="text-4xl md:text-5xl font-black bg-gradient-to-r from-pink-500 to-purple-500 bg-clip-text text-transparent mb-2">
-                🐴 ギャン中の予想部屋
-              </h1>
+              <div className="flex items-center justify-center gap-3 mb-3">
+                <HorsePixelArt size={40} />
+                <h1 className="text-4xl md:text-5xl font-black bg-gradient-to-r from-pink-500 to-purple-500 bg-clip-text text-transparent">
+                  ギャン中の予想部屋
+                </h1>
+                <HorsePixelArt size={40} />
+              </div>
               <p className="text-gray-600 text-base md:text-lg">期待値のある馬を探して競馬ライフをもっと楽しく✨</p>
             </div>
             <button
@@ -870,34 +993,37 @@ const HorseAnalysisApp = () => {
           <div className="flex gap-2 md:gap-4 mb-8 flex-wrap justify-center">
             <button
               onClick={() => setActiveTab('races-upcoming')}
-              className={`px-4 md:px-8 py-2 md:py-3 rounded-full font-bold text-sm md:text-base shadow-lg hover:shadow-2xl hover:scale-105 transition transform ${
+              className={`px-4 md:px-8 py-2 md:py-3 rounded-full font-bold text-sm md:text-base shadow-lg hover:shadow-2xl hover:scale-105 transition transform flex items-center gap-2 ${
                 activeTab === 'races-upcoming' || activeTab === 'races-past'
                   ? 'bg-gradient-to-r from-pink-400 to-pink-500 text-white'
                   : 'bg-white text-gray-700 hover:bg-gray-100'
               }`}
             >
-              📤 レース予想
+              <HorsePixelArt size={20} />
+              レース予想
             </button>
             <button
               onClick={() => setActiveTab('settings')}
-              className={`px-4 md:px-8 py-2 md:py-3 rounded-full font-bold text-sm md:text-base shadow-lg hover:shadow-2xl hover:scale-105 transition transform ${
+              className={`px-4 md:px-8 py-2 md:py-3 rounded-full font-bold text-sm md:text-base shadow-lg hover:shadow-2xl hover:scale-105 transition transform flex items-center gap-2 ${
                 activeTab === 'settings'
                   ? 'bg-gradient-to-r from-purple-400 to-purple-500 text-white'
                   : 'bg-white text-gray-700 hover:bg-gray-100'
               }`}
               disabled={!isAdmin}
             >
-              ⚙️ コース設定
+              <CrownPixelArt size={20} />
+              コース設定
             </button>
             <button
               onClick={() => setActiveTab('stats')}
-              className={`px-4 md:px-8 py-2 md:py-3 rounded-full font-bold text-sm md:text-base shadow-lg hover:shadow-2xl hover:scale-105 transition transform ${
+              className={`px-4 md:px-8 py-2 md:py-3 rounded-full font-bold text-sm md:text-base shadow-lg hover:shadow-2xl hover:scale-105 transition transform flex items-center gap-2 ${
                 activeTab === 'stats'
                   ? 'bg-gradient-to-r from-blue-400 to-blue-500 text-white'
                   : 'bg-white text-gray-700 hover:bg-gray-100'
               }`}
             >
-              📊 成績分析
+              <BarPixelArt size={20} />
+              成績分析
             </button>
           </div>
 
@@ -906,9 +1032,10 @@ const HorseAnalysisApp = () => {
               {isAdmin && (
                 <button
                   onClick={() => setShowUploadModal(true)}
-                  className="w-full px-8 py-4 bg-gradient-to-r from-pink-400 to-pink-500 text-white rounded-full hover:shadow-2xl hover:scale-105 transition transform font-bold text-lg mb-6 shadow-lg"
+                  className="w-full px-8 py-4 bg-gradient-to-r from-pink-400 to-pink-500 text-white rounded-full hover:shadow-2xl hover:scale-105 transition transform font-bold text-lg mb-6 shadow-lg flex items-center justify-center gap-2"
                 >
-                  📤 レースデータを追加
+                  <HorsePixelArt size={24} />
+                  レースデータを追加
                 </button>
               )}
               {!isAdmin && <p className="text-gray-500 text-sm mb-6 text-center">※ 管理者のみ追加可能</p>}
@@ -951,20 +1078,22 @@ const HorseAnalysisApp = () => {
                       className="bg-gradient-to-br from-pink-50 to-purple-50 rounded-2xl md:rounded-3xl p-4 md:p-6 border-2 border-pink-200 hover:border-purple-400 cursor-pointer hover:shadow-lg transition shadow-md hover:scale-105 group"
                     >
                       <div className="flex items-start justify-between mb-3">
-                        <div className="flex-1 min-w-0">
-                          <h3 className="font-bold text-base md:text-lg text-gray-800 flex items-center gap-2 truncate">
-                            <span className="text-xl md:text-2xl flex-shrink-0">
-                              {race.passcode ? '🔒' : '🏇'}
-                            </span>
-                            <span className="truncate">{race.name}</span>
-                          </h3>
-                          <p className="text-xs md:text-sm text-gray-600 mt-1 break-words">
-                            {race.createdAt} · {race.horses.length}頭
-                            {race.courseKey && ` · ${race.courseKey}`}
-                            {race.passcode && !isAdmin && (
-                              <span className="text-purple-600 font-bold"> · パスコード必要</span>
-                            )}
-                          </p>
+                        <div className="flex-1 min-w-0 flex items-start gap-2">
+                          <div className="flex-shrink-0 mt-0.5">
+                            {race.passcode ? <LockPixelArt size={20} /> : <HorsePixelArt size={20} />}
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <h3 className="font-bold text-base md:text-lg text-gray-800 truncate">
+                              {race.name}
+                            </h3>
+                            <p className="text-xs md:text-sm text-gray-600 mt-1 break-words">
+                              {race.createdAt} · {race.horses.length}頭
+                              {race.courseKey && ` · ${race.courseKey}`}
+                              {race.passcode && !isAdmin && (
+                                <span className="text-purple-600 font-bold"> · パスコード必要</span>
+                              )}
+                            </p>
+                          </div>
                         </div>
                         {isAdmin && (
                           <button
@@ -999,16 +1128,16 @@ const HorseAnalysisApp = () => {
                         
                         if (hasSuperExpectation) {
                           return (
-                            <div className="flex items-center gap-1 text-sm font-bold bg-gradient-to-r from-yellow-400 to-orange-400 text-white px-3 py-1.5 rounded-full shadow-md animate-pulse">
+                            <div className="flex items-center gap-2 text-sm font-bold bg-gradient-to-r from-yellow-400 to-orange-400 text-white px-3 py-1.5 rounded-full shadow-md animate-pulse">
                               <span className="text-base">💎</span>
                               <span>超期待値馬あり！</span>
-                              <span className="text-base">✨</span>
+                              <StarPixelArt size={16} />
                             </div>
                           );
                         } else if (hasExpectation) {
                           return (
-                            <div className="flex items-center gap-1 text-sm font-bold bg-gradient-to-r from-yellow-300 to-yellow-400 text-yellow-900 px-3 py-1.5 rounded-full shadow-md">
-                              <span className="text-base">✨</span>
+                            <div className="flex items-center gap-2 text-sm font-bold bg-gradient-to-r from-yellow-300 to-yellow-400 text-yellow-900 px-3 py-1.5 rounded-full shadow-md">
+                              <StarPixelArt size={16} />
                               <span>期待値馬あり！</span>
                             </div>
                           );
@@ -1035,9 +1164,10 @@ const HorseAnalysisApp = () => {
             <div className="bg-white rounded-3xl p-8 shadow-lg border-2 border-purple-200">
               <button
                 onClick={() => setShowSettingsModal(true)}
-                className="w-full px-8 py-4 bg-gradient-to-r from-purple-400 to-purple-500 text-white rounded-full hover:shadow-2xl hover:scale-105 transition transform font-bold text-lg mb-6 shadow-lg"
+                className="w-full px-8 py-4 bg-gradient-to-r from-purple-400 to-purple-500 text-white rounded-full hover:shadow-2xl hover:scale-105 transition transform font-bold text-lg mb-6 shadow-lg flex items-center justify-center gap-2"
               >
-                ➕ 新しいコース設定を作成
+                <CrownPixelArt size={24} />
+                新しいコース設定を作成
               </button>
 
               {Object.keys(courseSettings).length > 0 ? (
@@ -1076,38 +1206,44 @@ const HorseAnalysisApp = () => {
 
           {activeTab === 'stats' && (
             <div className="bg-white rounded-3xl p-8 shadow-lg border-2 border-blue-200">
-              <h2 className="text-2xl font-bold text-gray-700 mb-6">成績分析📊</h2>
+              <div className="flex items-center gap-3 mb-6">
+                <BarPixelArt size={28} />
+                <h2 className="text-2xl font-bold text-gray-700">成績分析</h2>
+              </div>
               
               <div className="flex gap-2 mb-6 flex-wrap">
                 <button
                   onClick={() => setStatsType('winrate')}
-                  className={`px-4 py-2 rounded-full font-bold transition text-sm ${
+                  className={`px-4 py-2 rounded-full font-bold transition text-sm flex items-center gap-2 ${
                     statsType === 'winrate'
                       ? 'bg-pink-400 text-white'
                       : 'bg-gray-200 text-gray-800 hover:bg-gray-300'
                   }`}
                 >
+                  <MedalPixelArt size={18} />
                   勝率1位馬
                 </button>
                 <button
                   onClick={() => setStatsType('expectation')}
-                  className={`px-4 py-2 rounded-full font-bold transition text-sm ${
+                  className={`px-4 py-2 rounded-full font-bold transition text-sm flex items-center gap-2 ${
                     statsType === 'expectation'
                       ? 'bg-yellow-400 text-white'
                       : 'bg-gray-200 text-gray-800 hover:bg-gray-300'
                   }`}
                 >
+                  <StarPixelArt size={18} />
                   期待値馬
                 </button>
                 <button
                   onClick={() => setStatsType('ai')}
-                  className={`px-4 py-2 rounded-full font-bold transition text-sm ${
+                  className={`px-4 py-2 rounded-full font-bold transition text-sm flex items-center gap-2 ${
                     statsType === 'ai'
                       ? 'bg-blue-400 text-white'
                       : 'bg-gray-200 text-gray-800 hover:bg-gray-300'
                   }`}
                 >
-                  🤖 AIおすすめ馬
+                  <TrophyPixelArt size={18} />
+                  AIおすすめ馬
                 </button>
               </div>
               
@@ -1120,7 +1256,10 @@ const HorseAnalysisApp = () => {
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div className="bg-gradient-to-br from-pink-100 to-pink-200 rounded-3xl p-6 border-2 border-pink-300 shadow-lg">
-                      <h3 className="text-lg font-bold text-pink-700 mb-3">単勝</h3>
+                      <div className="flex items-center gap-2 mb-3">
+                        <HeartPixelArt size={24} />
+                        <h3 className="text-lg font-bold text-pink-700">単勝</h3>
+                      </div>
                       <div className="text-4xl font-black text-pink-600">
                         {calculateStats(statsFilterCourse, statsType).tansho.rate}%
                       </div>
@@ -1129,7 +1268,10 @@ const HorseAnalysisApp = () => {
                       </div>
                     </div>
                     <div className="bg-gradient-to-br from-purple-100 to-purple-200 rounded-3xl p-6 border-2 border-purple-300 shadow-lg">
-                      <h3 className="text-lg font-bold text-purple-700 mb-3">複勝</h3>
+                      <div className="flex items-center gap-2 mb-3">
+                        <TrophyPixelArt size={24} />
+                        <h3 className="text-lg font-bold text-purple-700">複勝</h3>
+                      </div>
                       <div className="text-4xl font-black text-purple-600">
                         {calculateStats(statsFilterCourse, statsType).fukusho.rate}%
                       </div>
@@ -1152,7 +1294,10 @@ const HorseAnalysisApp = () => {
           {showUploadModal && (
             <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
               <div className="bg-white rounded-3xl p-8 max-w-2xl w-full shadow-2xl">
-                <h3 className="text-2xl font-bold mb-6 text-gray-800">レースデータを追加</h3>
+                <h3 className="text-2xl font-bold mb-6 text-gray-800 flex items-center gap-2">
+                  <HorsePixelArt size={28} />
+                  レースデータを追加
+                </h3>
 
                 {importMessage && (
                   <div className={`p-4 rounded-2xl mb-6 font-bold ${
@@ -1192,7 +1337,8 @@ const HorseAnalysisApp = () => {
                 {/* 🔒 パスコード入力欄を追加 */}
                 <div className="mb-6">
                   <label className="block text-sm font-bold text-gray-700 mb-2 flex items-center gap-2">
-                    🔒 パスコード（オプション）
+                    <LockPixelArt size={20} />
+                    パスコード（オプション）
                     <span className="text-xs text-gray-500 font-normal">※6桁の数字</span>
                   </label>
                   <input
@@ -1251,7 +1397,9 @@ const HorseAnalysisApp = () => {
             <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
               <div className="bg-white rounded-3xl p-8 max-w-md w-full shadow-2xl">
                 <div className="text-center mb-6">
-                  <div className="text-5xl mb-4">🔒</div>
+                  <div className="flex justify-center mb-4">
+                    <LockPixelArt size={48} />
+                  </div>
                   <h3 className="text-2xl font-bold text-gray-800">パスコードを入力</h3>
                   <p className="text-sm text-gray-600 mt-2">
                     このレースは保護されています
@@ -1316,7 +1464,10 @@ const HorseAnalysisApp = () => {
           {showSettingsModal && (
             <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
               <div className="bg-white rounded-3xl p-8 max-w-2xl w-full shadow-2xl max-h-96 overflow-y-auto">
-                <h3 className="text-2xl font-bold mb-6 text-gray-800">新しいコース設定を作成</h3>
+                <h3 className="text-2xl font-bold mb-6 text-gray-800 flex items-center gap-2">
+                  <CrownPixelArt size={28} />
+                  新しいコース設定を作成
+                </h3>
 
                 <div className="mb-6">
                   <label className="block text-sm font-bold text-gray-700 mb-2">コース名</label>
@@ -1387,7 +1538,10 @@ const HorseAnalysisApp = () => {
           {showAdminModal && (
             <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
               <div className="bg-white rounded-3xl p-8 max-w-md w-full shadow-2xl">
-                <h3 className="text-2xl font-bold mb-6 text-gray-800">管理者パスコード</h3>
+                <h3 className="text-2xl font-bold mb-6 text-gray-800 flex items-center gap-2">
+                  <CrownPixelArt size={28} />
+                  管理者パスコード
+                </h3>
                 
                 {isAdmin && (
                   <div className="mb-6">
@@ -1505,15 +1659,18 @@ const HorseAnalysisApp = () => {
     <div className="w-full min-h-screen bg-gradient-to-br from-pink-100 via-purple-50 to-blue-100 p-6">
       <div className="max-w-6xl mx-auto">
         <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 mb-8 bg-white rounded-3xl p-4 md:p-6 shadow-lg border-2 border-pink-200">
-          <div className="flex-1 min-w-0">
-            <h1 className="text-2xl md:text-4xl font-black bg-gradient-to-r from-pink-500 to-purple-500 bg-clip-text text-transparent break-words">
-              {currentRace.name}
-            </h1>
-            <p className="text-xs md:text-base text-gray-600 mt-2 font-bold break-words">
-              {currentRace.createdAt} · {currentRace.horses.length}頭
-              {raceSelectedCourse && ` · ${raceSelectedCourse}`}
-              {isAdmin && ` · EXP係数: ${expCoefficient}`}
-            </p>
+          <div className="flex-1 min-w-0 flex items-start gap-3">
+            <HorsePixelArt size={32} />
+            <div>
+              <h1 className="text-2xl md:text-4xl font-black bg-gradient-to-r from-pink-500 to-purple-500 bg-clip-text text-transparent break-words">
+                {currentRace.name}
+              </h1>
+              <p className="text-xs md:text-base text-gray-600 mt-2 font-bold break-words">
+                {currentRace.createdAt} · {currentRace.horses.length}頭
+                {raceSelectedCourse && ` · ${raceSelectedCourse}`}
+                {isAdmin && ` · EXP係数: ${expCoefficient}`}
+              </p>
+            </div>
           </div>
           <button
             onClick={() => setCurrentRace(null)}
@@ -1531,7 +1688,10 @@ const HorseAnalysisApp = () => {
         )}
 
         <div className="bg-white rounded-3xl p-4 md:p-6 shadow-lg mb-6 border-2 border-pink-200">
-          <h2 className="text-lg md:text-xl font-bold text-gray-700 mb-4">ファクター選択</h2>
+          <h2 className="text-lg md:text-xl font-bold text-gray-700 mb-4 flex items-center gap-2">
+            <StarPixelArt size={24} />
+            ファクター選択
+          </h2>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3 p-3 md:p-4 bg-gradient-to-br from-pink-50 to-purple-50 rounded-2xl">
             {Object.entries(selectedFactors).map(([factorKey, isSelected]) => (
               <label key={factorKey} className="flex items-center gap-2 cursor-pointer p-2 hover:bg-white rounded-lg transition text-xs md:text-sm">
@@ -1549,19 +1709,23 @@ const HorseAnalysisApp = () => {
 
         <div className="bg-white rounded-3xl p-4 md:p-6 shadow-lg mb-6 border-2 border-purple-200">
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3 mb-6">
-            <div>
-              <h2 className="text-xl md:text-2xl font-bold text-gray-700">勝率ランキング</h2>
-              {raceSelectedCourse && (
-                <p className="text-xs md:text-sm text-gray-600 mt-1 font-bold">コース設定: {raceSelectedCourse}</p>
-              )}
+            <div className="flex items-start gap-2">
+              <CrownPixelArt size={28} />
+              <div>
+                <h2 className="text-xl md:text-2xl font-bold text-gray-700">勝率ランキング</h2>
+                {raceSelectedCourse && (
+                  <p className="text-xs md:text-sm text-gray-600 mt-1 font-bold">コース設定: {raceSelectedCourse}</p>
+                )}
+              </div>
             </div>
             <div className="flex gap-2 flex-wrap justify-start md:justify-end w-full md:w-auto">
               {isAdmin && (
                 <>
                   <button
                     onClick={() => setShowCourseSelectModal(true)}
-                    className="px-3 md:px-4 py-1 md:py-2 bg-gradient-to-r from-purple-400 to-purple-500 text-white rounded-full font-bold text-xs md:text-sm shadow-lg hover:shadow-2xl hover:scale-105 transition transform whitespace-nowrap"
+                    className="px-3 md:px-4 py-1 md:py-2 bg-gradient-to-r from-purple-400 to-purple-500 text-white rounded-full font-bold text-xs md:text-sm shadow-lg hover:shadow-2xl hover:scale-105 transition transform whitespace-nowrap flex items-center gap-1"
                   >
+                    <CrownPixelArt size={16} />
                     コース変更
                   </button>
                   <button
@@ -1584,14 +1748,16 @@ const HorseAnalysisApp = () => {
                       setOddsInput(currentRace.odds || {});
                       setShowOddsModal(true);
                     }}
-                    className="px-3 md:px-4 py-1 md:py-2 bg-gradient-to-r from-orange-400 to-orange-500 text-white rounded-full font-bold text-xs md:text-sm shadow-lg hover:shadow-2xl hover:scale-105 transition transform whitespace-nowrap"
+                    className="px-3 md:px-4 py-1 md:py-2 bg-gradient-to-r from-orange-400 to-orange-500 text-white rounded-full font-bold text-xs md:text-sm shadow-lg hover:shadow-2xl hover:scale-105 transition transform whitespace-nowrap flex items-center gap-1"
                   >
+                    <StarPixelArt size={16} />
                     オッズ入力
                   </button>
                   <button
                     onClick={() => setShowResultModal(true)}
-                    className="px-3 md:px-4 py-1 md:py-2 bg-gradient-to-r from-green-400 to-green-500 text-white rounded-full font-bold text-xs md:text-sm shadow-lg hover:shadow-2xl hover:scale-105 transition transform whitespace-nowrap"
+                    className="px-3 md:px-4 py-1 md:py-2 bg-gradient-to-r from-green-400 to-green-500 text-white rounded-full font-bold text-xs md:text-sm shadow-lg hover:shadow-2xl hover:scale-105 transition transform whitespace-nowrap flex items-center gap-1"
                   >
+                    <MedalPixelArt size={16} />
                     結果記録
                   </button>
                 </>
@@ -1603,9 +1769,10 @@ const HorseAnalysisApp = () => {
                   setGeneratedBets([]);
                   setShowBettingModal(true);
                 }}
-                className="px-3 md:px-4 py-1 md:py-2 bg-gradient-to-r from-cyan-400 to-cyan-500 text-white rounded-full font-bold text-xs md:text-sm shadow-lg hover:shadow-2xl hover:scale-105 transition transform whitespace-nowrap"
+                className="px-3 md:px-4 py-1 md:py-2 bg-gradient-to-r from-cyan-400 to-cyan-500 text-white rounded-full font-bold text-xs md:text-sm shadow-lg hover:shadow-2xl hover:scale-105 transition transform whitespace-nowrap flex items-center gap-1"
               >
-                💰 買い目生成
+                <TrophyPixelArt size={16} />
+                買い目生成
               </button>
             </div>
           </div>
@@ -1635,7 +1802,8 @@ const HorseAnalysisApp = () => {
                         {idx + 1}位
                       </div>
                       <div className="flex-1">
-                        <div className="text-lg font-bold text-gray-800">
+                        <div className="text-lg font-bold text-gray-800 flex items-center gap-2">
+                          <HorsePixelArt size={20} />
                           {horse.horseNum}. {horse.name}
                         </div>
                         {odds > 0 && (
@@ -1653,10 +1821,21 @@ const HorseAnalysisApp = () => {
                         {horse.winRate.toFixed(1)}%
                       </div>
                       {odds > 0 && (
-                        <div className={`text-sm font-bold mt-1 ${
+                        <div className={`text-sm font-bold mt-1 flex items-center justify-end gap-1 ${
                           isSuperExpectation ? 'text-orange-700' : isGoodExpectation ? 'text-yellow-700' : 'text-gray-600'
                         }`}>
-                          {isSuperExpectation ? '💎超期待値馬！' : isGoodExpectation ? '✨期待値馬！' : ''}
+                          {isSuperExpectation && (
+                            <>
+                              <span>💎超期待値馬！</span>
+                              <StarPixelArt size={16} />
+                            </>
+                          )}
+                          {isGoodExpectation && (
+                            <>
+                              <span>✨期待値馬！</span>
+                              <StarPixelArt size={16} />
+                            </>
+                          )}
                         </div>
                       )}
                     </div>
@@ -1694,7 +1873,7 @@ const HorseAnalysisApp = () => {
             {aiRecommendation && (
               <div className="mt-6 pt-4 border-t-2 border-blue-300">
                 <div className="flex items-center gap-2 mb-3">
-                  <span className="text-2xl">🤖</span>
+                  <TrophyPixelArt size={24} />
                   <p className="text-sm text-blue-600 font-bold">AIおすすめ馬</p>
                 </div>
                 <div className="p-4 bg-gradient-to-r from-blue-100 to-cyan-100 rounded-2xl border-2 border-blue-400 shadow-md">
@@ -1722,12 +1901,16 @@ const HorseAnalysisApp = () => {
 
         <div className="bg-white rounded-3xl p-6 shadow-lg border-2 border-blue-200">
           <div className="flex justify-between items-center mb-4">
-            <h2 className="text-xl font-bold text-gray-700">📝 メモ</h2>
+            <div className="flex items-center gap-2">
+              <HeartPixelArt size={24} />
+              <h2 className="text-xl font-bold text-gray-700">メモ</h2>
+            </div>
             {isAdmin && (
               <button
                 onClick={() => setShowMemoModal(true)}
-                className="px-4 py-2 bg-gradient-to-r from-blue-400 to-blue-500 text-white rounded-full font-bold text-sm shadow-lg hover:shadow-2xl transition"
+                className="px-4 py-2 bg-gradient-to-r from-blue-400 to-blue-500 text-white rounded-full font-bold text-sm shadow-lg hover:shadow-2xl transition flex items-center gap-2"
               >
+                <StarPixelArt size={16} />
                 編集
               </button>
             )}
@@ -1740,7 +1923,10 @@ const HorseAnalysisApp = () => {
         {showCourseSelectModal && isAdmin && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
             <div className="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl">
-              <h3 className="text-xl font-bold mb-6 text-gray-800">コース設定を選択</h3>
+              <h3 className="text-xl font-bold mb-6 text-gray-800 flex items-center gap-2">
+                <CrownPixelArt size={24} />
+                コース設定を選択
+              </h3>
               
               <div className="space-y-3 mb-6">
                 <button
@@ -1787,7 +1973,10 @@ const HorseAnalysisApp = () => {
         {showExpModal && isAdmin && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
             <div className="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl">
-              <h3 className="text-xl font-bold mb-6 text-gray-800">EXP係数を調整</h3>
+              <h3 className="text-xl font-bold mb-6 text-gray-800 flex items-center gap-2">
+                <StarPixelArt size={24} />
+                EXP係数を調整
+              </h3>
               
               <div className="mb-6">
                 <label className="block text-sm font-bold text-gray-700 mb-4">
@@ -1834,7 +2023,10 @@ const HorseAnalysisApp = () => {
         {showExcludeModal && isAdmin && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
             <div className="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl max-h-96 overflow-y-auto">
-              <h3 className="text-xl font-bold mb-6 text-gray-800">馬を除外（出走取り消しなど）</h3>
+              <h3 className="text-xl font-bold mb-6 text-gray-800 flex items-center gap-2">
+                <LockPixelArt size={24} />
+                馬を除外（出走取り消しなど）
+              </h3>
               
               <div className="space-y-3 mb-6">
                 {currentRace.horses.sort((a, b) => a.horseNum - b.horseNum).map((horse) => (
@@ -1873,7 +2065,10 @@ const HorseAnalysisApp = () => {
         {showMemoModal && isAdmin && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
             <div className="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl">
-              <h3 className="text-xl font-bold mb-6 text-gray-800">メモを編集</h3>
+              <h3 className="text-xl font-bold mb-6 text-gray-800 flex items-center gap-2">
+                <HeartPixelArt size={24} />
+                メモを編集
+              </h3>
               
               <textarea
                 value={memo}
@@ -1906,7 +2101,10 @@ const HorseAnalysisApp = () => {
         {showOddsModal && isAdmin && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
             <div className="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl max-h-96 overflow-y-auto">
-              <h3 className="text-xl font-bold mb-6 text-gray-800">オッズを入力</h3>
+              <h3 className="text-xl font-bold mb-6 text-gray-800 flex items-center gap-2">
+                <StarPixelArt size={24} />
+                オッズを入力
+              </h3>
               
               <div className="space-y-3 mb-6">
                 {currentRace.horses.sort((a, b) => a.horseNum - b.horseNum).map((horse) => (
@@ -1948,7 +2146,10 @@ const HorseAnalysisApp = () => {
         {showResultModal && isAdmin && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
             <div className="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl">
-              <h3 className="text-2xl font-bold mb-6 text-gray-800">着順を記録</h3>
+              <h3 className="text-2xl font-bold mb-6 text-gray-800 flex items-center gap-2">
+                <MedalPixelArt size={28} />
+                着順を記録
+              </h3>
               
               <div className="mb-6">
                 <label className="text-sm font-bold text-gray-700 mb-3 block">着順を馬番で入力</label>
@@ -1987,7 +2188,10 @@ const HorseAnalysisApp = () => {
         {showBettingModal && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
             <div className="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl max-h-[90vh] overflow-y-auto">
-              <h3 className="text-2xl font-bold mb-6 text-gray-800">💰 買い目自動生成</h3>
+              <h3 className="text-2xl font-bold mb-6 text-gray-800 flex items-center gap-2">
+                <TrophyPixelArt size={28} />
+                買い目自動生成
+              </h3>
               
               <div className="mb-6">
                 <label className="block text-sm font-bold text-gray-700 mb-3">予算を入力（100円単位）</label>
@@ -2016,8 +2220,13 @@ const HorseAnalysisApp = () => {
                         : 'bg-gray-100 text-gray-800 hover:bg-gray-200'
                     }`}
                   >
-                    🎯 的中率特化型
-                    <p className="text-xs mt-1 opacity-80">勝率1位馬から買い目を生成</p>
+                    <div className="flex items-center gap-2">
+                      <MedalPixelArt size={20} />
+                      <div>
+                        <div>🎯 的中率特化型</div>
+                        <p className="text-xs mt-1 opacity-80">勝率1位馬から買い目を生成</p>
+                      </div>
+                    </div>
                   </button>
                   <button
                     onClick={() => setBettingType('value')}
@@ -2027,8 +2236,13 @@ const HorseAnalysisApp = () => {
                         : 'bg-gray-100 text-gray-800 hover:bg-gray-200'
                     }`}
                   >
-                    💎 回収率特化型
-                    <p className="text-xs mt-1 opacity-80">期待値馬から買い目を生成</p>
+                    <div className="flex items-center gap-2">
+                      <StarPixelArt size={20} />
+                      <div>
+                        <div>💎 回収率特化型</div>
+                        <p className="text-xs mt-1 opacity-80">期待値馬から買い目を生成</p>
+                      </div>
+                    </div>
                   </button>
                 </div>
               </div>
@@ -2036,13 +2250,17 @@ const HorseAnalysisApp = () => {
               {generatedBets.length === 0 ? (
                 <button
                   onClick={generateBettingRecommendations}
-                  className="w-full px-6 py-3 bg-gradient-to-r from-cyan-400 to-cyan-500 text-white rounded-full font-bold shadow-lg hover:shadow-2xl transition mb-4"
+                  className="w-full px-6 py-3 bg-gradient-to-r from-cyan-400 to-cyan-500 text-white rounded-full font-bold shadow-lg hover:shadow-2xl transition mb-4 flex items-center justify-center gap-2"
                 >
+                  <TrophyPixelArt size={20} />
                   買い目を生成
                 </button>
               ) : (
                 <div className="mb-6">
-                  <h4 className="text-lg font-bold text-gray-700 mb-3">推奨買い目</h4>
+                  <h4 className="text-lg font-bold text-gray-700 mb-3 flex items-center gap-2">
+                    <StarPixelArt size={20} />
+                    推奨買い目
+                  </h4>
                   <div className="space-y-3">
                     {generatedBets.map((bet, idx) => (
                       <div key={idx} className="p-4 bg-gradient-to-r from-cyan-50 to-blue-50 rounded-2xl border-2 border-cyan-300">
@@ -2063,7 +2281,8 @@ const HorseAnalysisApp = () => {
                       </div>
                     ))}
                   </div>
-                  <div className="mt-4 p-3 bg-cyan-100 rounded-2xl text-sm text-cyan-800 font-bold">
+                  <div className="mt-4 p-3 bg-cyan-100 rounded-2xl text-sm text-cyan-800 font-bold flex items-center gap-2">
+                    <TrophyPixelArt size={20} />
                     合計: {generatedBets.reduce((sum, bet) => sum + bet.amount, 0)}円
                   </div>
                 </div>
