@@ -20,6 +20,9 @@ const database = getDatabase(app);
 const auth = getAuth(app);
 
 const HorseAnalysisApp = () => {
+  // アプリのバージョン（更新時にこの数字を増やす）
+  const APP_VERSION = '2.0.0';
+  
   const [races, setRaces] = useState([]);
   const [currentRace, setCurrentRace] = useState(null);
   const [pasteText, setPasteText] = useState('');
@@ -113,6 +116,18 @@ const HorseAnalysisApp = () => {
     onAuthStateChanged(auth, user => {
       if (user) {
         setUserId(user.uid);
+        
+        // バージョンチェック
+        const versionRef = ref(database, 'appVersion');
+        onValue(versionRef, snapshot => {
+          const serverVersion = snapshot.val();
+          if (serverVersion && serverVersion !== APP_VERSION) {
+            // サーバーのバージョンが異なる場合、リロードを促す
+            if (window.confirm('新しいバージョンが利用可能です。ページを更新しますか？')) {
+              window.location.reload(true);
+            }
+          }
+        });
         
         const racesRef = ref(database, 'races');
         onValue(racesRef, snapshot => {
