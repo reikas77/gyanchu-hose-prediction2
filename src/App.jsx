@@ -228,9 +228,7 @@ const HorseAnalysisApp = () => {
   // ✨ ファクター分析用のstate
   const [showFactorAnalysisModal, setShowFactorAnalysisModal] = useState(false);
   const [selectedAnalysisCourse, setSelectedAnalysisCourse] = useState(null);
-  const [selectedAnalysisDistance, setSelectedAnalysisDistance] = useState(null);
   const [factorAnalysisResults, setFactorAnalysisResults] = useState(null);
-  const [courseDistanceMap, setCourseDistanceMap] = useState({});
 
   const factors = [
     { name: '能力値', weight: 15, key: 'タイム指数' },
@@ -298,11 +296,6 @@ const HorseAnalysisApp = () => {
       }
     });
   }, []);
-
-  // ✨ ファクター分析用useEffect
-  useEffect(() => {
-    setCourseDistanceMap(getDistinctCourseDistances());
-  }, [races]);
 
   const parseHorseData = (text) => {
     const lines = text.trim().split('\n');
@@ -894,24 +887,13 @@ const HorseAnalysisApp = () => {
     };
   };
 
-  // ✨ ファクター毎の的中率分析関数
-  const calculateFactorStats = (courseKey = null, distance = null) => {
+  // ✨ ファクター毎の的中率分析関数（改善版）
+  const calculateFactorStats = (courseKey = null) => {
     let recordedRaces = races.filter(r => r.result && r.odds && Object.keys(r.odds).length > 0);
     
+    // コース設定でフィルタリング
     if (courseKey && courseKey !== 'all') {
       recordedRaces = recordedRaces.filter(r => r.courseKey === courseKey);
-    }
-    
-    if (distance) {
-      recordedRaces = recordedRaces.filter(r => {
-        const raceName = r.name;
-        const distanceMatch = raceName.match(/(\d{3,4})/);
-        if (distanceMatch) {
-          const raceDistance = parseInt(distanceMatch[1]);
-          return Math.abs(raceDistance - distance) < 100;
-        }
-        return false;
-      });
     }
     
     if (recordedRaces.length === 0) return null;
@@ -936,21 +918,28 @@ const HorseAnalysisApp = () => {
 
       if (resultNums.length === 0) return;
 
+      // 各ファクターごとに単独で勝率を計算
       Object.keys(factorStats).forEach(factorKey => {
-        const topHorseByFactor = race.horses
-          .filter(h => !excludedHorses[h.horseNum])
-          .reduce((top, horse) => {
-            const score = horse.scores[factorKey] || 0;
-            return score > (top.scores[factorKey] || 0) ? horse : top;
-          }, race.horses[0]);
+        // 除外馬を除く
+        const activeHorses = race.horses.filter(h => !race.excluded || !race.excluded[h.horseNum]);
+        
+        if (activeHorses.length === 0) return;
+
+        // このファクターのスコアが最も高い馬を取得
+        const topHorseByFactor = activeHorses.reduce((top, horse) => {
+          const score = horse.scores[factorKey] || 0;
+          return score > (top.scores[factorKey] || 0) ? horse : top;
+        }, activeHorses[0]);
 
         if (topHorseByFactor) {
           factorStats[factorKey].total++;
 
+          // 単勝判定
           if (resultNums[0] === topHorseByFactor.horseNum) {
             factorStats[factorKey].tansho++;
           }
 
+          // 複勝判定
           if (resultNums.slice(0, 3).includes(topHorseByFactor.horseNum)) {
             factorStats[factorKey].fukusho++;
           }
@@ -970,35 +959,19 @@ const HorseAnalysisApp = () => {
     return { results: result, recordedRacesCount: recordedRaces.length };
   };
 
-  // 🏟️ コース一覧と距離を取得
-  const getDistinctCourseDistances = () => {
-    const coursesData = {};
+  // 🏟️ コース設定の一覧を取得（結果が記録されているもののみ）
+  const getAvailableCourses = () => {
+    const coursesWithResults = new Set();
     races.forEach(race => {
-      if (race.result) {
-        const courseKey = race.courseKey || 'デフォルト';
-        const raceName = race.name;
-        const distanceMatch = raceName.match(/(\d{3,4})/);
-        
-        if (distanceMatch) {
-          const distance = parseInt(distanceMatch[1]);
-          if (!coursesData[courseKey]) {
-            coursesData[courseKey] = new Set();
-          }
-          coursesData[courseKey].add(distance);
-        }
+      if (race.result && race.courseKey) {
+        coursesWithResults.add(race.courseKey);
       }
     });
-
-    const result = {};
-    Object.entries(coursesData).forEach(([course, distances]) => {
-      result[course] = Array.from(distances).sort((a, b) => a - b);
-    });
-
-    return result;
+    return Array.from(coursesWithResults).sort();
   };
 
   const handleAnalyzeFactors = () => {
-    const analysisResults = calculateFactorStats(selectedAnalysisCourse, selectedAnalysisDistance);
+    const analysisResults = calculateFactorStats(selectedAnalysisCourse);
     setFactorAnalysisResults(analysisResults);
   };
 
@@ -1088,6 +1061,8 @@ const HorseAnalysisApp = () => {
   }
 
   if (!currentRace) {
+    const availableCourses = getAvailableCourses();
+
     return (
       <div className="w-full min-h-screen bg-gradient-to-br from-pink-100 via-purple-50 to-blue-100 p-6">
         <div className="max-w-4xl mx-auto">
@@ -1435,35 +1410,28 @@ const HorseAnalysisApp = () => {
 
                 {!factorAnalysisResults ? (
                   <div className="space-y-6">
+                    <div className="p-4 bg-purple-50 rounded-2xl border-2 border-purple-200">
+                      <p className="text-sm text-purple-800 font-bold">
+                        📊 各ファクター単独で勝率1位になった馬の的中率を分析します
+                      </p>
+                    </div>
+
                     <div>
-                      <label className="block text-sm font-bold text-gray-700 mb-3">コースを選択</label>
+                      <label className="block text-sm font-bold text-gray-700 mb-3">コース設定を選択</label>
                       <select
                         value={selectedAnalysisCourse || ''}
                         onChange={(e) => setSelectedAnalysisCourse(e.target.value || null)}
                         className="w-full px-4 py-3 border-2 border-purple-300 rounded-2xl focus:outline-none focus:border-purple-500 font-bold"
                       >
-                        <option value="">全コース</option>
-                        {Object.keys(courseDistanceMap).map(course => (
+                        <option value="">全コース（デフォルト設定含む）</option>
+                        {availableCourses.map(course => (
                           <option key={course} value={course}>{course}</option>
                         ))}
                       </select>
+                      <p className="text-xs text-gray-600 mt-2 font-bold">
+                        ※ 結果が記録されているレースのコース設定のみ表示されます
+                      </p>
                     </div>
-
-                    {selectedAnalysisCourse && courseDistanceMap[selectedAnalysisCourse]?.length > 0 && (
-                      <div>
-                        <label className="block text-sm font-bold text-gray-700 mb-3">距離を選択（オプション）</label>
-                        <select
-                          value={selectedAnalysisDistance || ''}
-                          onChange={(e) => setSelectedAnalysisDistance(e.target.value ? parseInt(e.target.value) : null)}
-                          className="w-full px-4 py-3 border-2 border-purple-300 rounded-2xl focus:outline-none focus:border-purple-500 font-bold"
-                        >
-                          <option value="">すべての距離</option>
-                          {courseDistanceMap[selectedAnalysisCourse].map(distance => (
-                            <option key={distance} value={distance}>{distance}m</option>
-                          ))}
-                        </select>
-                      </div>
-                    )}
 
                     <button
                       onClick={handleAnalyzeFactors}
@@ -1479,7 +1447,7 @@ const HorseAnalysisApp = () => {
                       <p className="text-sm text-purple-800 font-bold">
                         📊 対象レース: {factorAnalysisResults.recordedRacesCount}レース
                         {selectedAnalysisCourse && ` (${selectedAnalysisCourse})`}
-                        {selectedAnalysisDistance && ` (${selectedAnalysisDistance}m)`}
+                        {!selectedAnalysisCourse && ' (全コース)'}
                       </p>
                     </div>
 
@@ -1507,8 +1475,8 @@ const HorseAnalysisApp = () => {
                             </div>
 
                             <div className="mt-3 flex items-end gap-1 h-12">
-                              <div className="flex-1 bg-pink-300 rounded-t opacity-70" style={{height: `${parseFloat(stats.tanshoRate) * 1.5}px`}}></div>
-                              <div className="flex-1 bg-purple-300 rounded-t opacity-70" style={{height: `${parseFloat(stats.fukushoRate) * 1.5}px`}}></div>
+                              <div className="flex-1 bg-pink-300 rounded-t opacity-70" style={{height: `${Math.min(parseFloat(stats.tanshoRate) * 1.5, 100)}px`}}></div>
+                              <div className="flex-1 bg-purple-300 rounded-t opacity-70" style={{height: `${Math.min(parseFloat(stats.fukushoRate) * 1.5, 100)}px`}}></div>
                             </div>
                           </div>
                         ))}
@@ -1518,7 +1486,6 @@ const HorseAnalysisApp = () => {
                       onClick={() => {
                         setFactorAnalysisResults(null);
                         setSelectedAnalysisCourse(null);
-                        setSelectedAnalysisDistance(null);
                       }}
                       className="w-full px-6 py-3 bg-gray-400 text-white rounded-full font-bold hover:bg-gray-500 transition"
                     >
@@ -1532,7 +1499,6 @@ const HorseAnalysisApp = () => {
                     setShowFactorAnalysisModal(false);
                     setFactorAnalysisResults(null);
                     setSelectedAnalysisCourse(null);
-                    setSelectedAnalysisDistance(null);
                     setActiveTab('races-upcoming');
                   }}
                   className="w-full mt-4 px-6 py-3 bg-gray-300 text-gray-800 rounded-full font-bold hover:bg-gray-400 transition"
