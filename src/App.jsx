@@ -23,6 +23,17 @@ const HorseAnalysisApp = () => {
   // アプリのバージョン（更新時にこの数字を増やす）
   const APP_VERSION = '2.0.0';
   
+  // 初回レンダリング時にバージョンチェック
+  useEffect(() => {
+    const savedVersion = localStorage.getItem('appVersion');
+    if (savedVersion !== APP_VERSION) {
+      // バージョンが変わっていたら強制リロード
+      localStorage.setItem('appVersion', APP_VERSION);
+      window.location.reload(true);
+      return;
+    }
+  }, []);
+  
   const [races, setRaces] = useState([]);
   const [currentRace, setCurrentRace] = useState(null);
   const [pasteText, setPasteText] = useState('');
