@@ -2295,12 +2295,92 @@ const HorseAnalysisApp = () => {
                 メモを編集
               </h3>
               
-              <textarea
-                value={memo}
-                onChange={(e) => setMemo(e.target.value)}
-                className="w-full h-48 p-4 border-2 border-blue-300 rounded-2xl font-mono text-sm mb-6 focus:outline-none focus:border-blue-500"
-                placeholder="見解、印、買い目など..."
-              />
+              {/* 書式設定ツールバー */}
+<div className="flex gap-2 mb-3 p-3 bg-gray-100 rounded-2xl flex-wrap">
+  <button
+    onClick={() => document.execCommand('bold')}
+    className="px-3 py-2 bg-white rounded-lg font-bold hover:bg-blue-100 transition border-2 border-gray-300"
+    title="太字"
+  >
+    <span className="font-bold">B</span>
+  </button>
+  <button
+    onClick={() => document.execCommand('italic')}
+    className="px-3 py-2 bg-white rounded-lg italic hover:bg-blue-100 transition border-2 border-gray-300"
+    title="斜体"
+  >
+    <span className="italic">I</span>
+  </button>
+  <button
+    onClick={() => document.execCommand('underline')}
+    className="px-3 py-2 bg-white rounded-lg underline hover:bg-blue-100 transition border-2 border-gray-300"
+    title="下線"
+  >
+    <span className="underline">U</span>
+  </button>
+  <div className="h-8 w-px bg-gray-400 mx-2"></div>
+  <button
+    onClick={() => document.execCommand('foreColor', false, '#ef4444')}
+    className="px-3 py-2 bg-white rounded-lg hover:bg-red-100 transition border-2 border-gray-300"
+    title="赤"
+  >
+    <span className="text-red-500 font-bold">A</span>
+  </button>
+  <button
+    onClick={() => document.execCommand('foreColor', false, '#3b82f6')}
+    className="px-3 py-2 bg-white rounded-lg hover:bg-blue-100 transition border-2 border-gray-300"
+    title="青"
+  >
+    <span className="text-blue-500 font-bold">A</span>
+  </button>
+  <button
+    onClick={() => document.execCommand('foreColor', false, '#22c55e')}
+    className="px-3 py-2 bg-white rounded-lg hover:bg-green-100 transition border-2 border-gray-300"
+    title="緑"
+  >
+    <span className="text-green-500 font-bold">A</span>
+  </button>
+  <button
+    onClick={() => document.execCommand('foreColor', false, '#a855f7')}
+    className="px-3 py-2 bg-white rounded-lg hover:bg-purple-100 transition border-2 border-gray-300"
+    title="紫"
+  >
+    <span className="text-purple-500 font-bold">A</span>
+  </button>
+  <button
+    onClick={() => document.execCommand('foreColor', false, '#000000')}
+    className="px-3 py-2 bg-white rounded-lg hover:bg-gray-200 transition border-2 border-gray-300"
+    title="黒"
+  >
+    <span className="text-black font-bold">A</span>
+  </button>
+  <div className="h-8 w-px bg-gray-400 mx-2"></div>
+  <button
+    onClick={() => document.execCommand('removeFormat')}
+    className="px-3 py-2 bg-white rounded-lg hover:bg-gray-200 transition border-2 border-gray-300 text-sm"
+    title="書式をクリア"
+  >
+    🧹 クリア
+  </button>
+</div>
+
+<div
+  ref={(el) => {
+    if (el && !el.innerHTML && memo) {
+      el.innerHTML = memo;
+    }
+  }}
+  contentEditable
+  onInput={(e) => setMemo(e.currentTarget.innerHTML)}
+  className="w-full min-h-48 p-4 border-2 border-blue-300 rounded-2xl text-sm mb-6 focus:outline-none focus:border-blue-500 bg-white overflow-y-auto max-h-96"
+  style={{ whiteSpace: 'pre-wrap' }}
+  suppressContentEditableWarning
+>
+</div>
+
+<div className="p-3 bg-blue-50 rounded-2xl text-xs text-blue-800 font-bold mb-6 border-2 border-blue-200">
+  💡 ヒント: テキストを選択してから書式ボタンを押すと、選択部分に書式が適用されます
+</div>
 
               <div className="flex gap-4">
                 <button
