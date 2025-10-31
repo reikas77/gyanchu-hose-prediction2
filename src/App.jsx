@@ -1375,7 +1375,7 @@ const HorseAnalysisApp = () => {
                 <div className="flex gap-4">
                   <button
                     onClick={() => {
-                      if (adminPassword === '1234') {
+                      if (adminPassword === '6969331') {
                         setIsAdmin(true);
                         setAdminPassword('');
                         setShowAdminModal(false);
