@@ -2134,8 +2134,15 @@ const HorseAnalysisApp = () => {
             )}
           </div>
           <div className="p-4 bg-gradient-to-br from-blue-50 to-purple-50 rounded-2xl border-2 border-blue-200 min-h-32">
-            <p className="text-gray-700 whitespace-pre-wrap font-bold">{memo || '（メモなし）'}</p>
-          </div>
+  {memo ? (
+    <div 
+      className="text-gray-700 font-bold"
+      dangerouslySetInnerHTML={{ __html: memo }}
+    />
+  ) : (
+    <p className="text-gray-500 font-bold">（メモなし）</p>
+  )}
+</div>
         </div>
 
         {showCourseSelectModal && isAdmin && (
