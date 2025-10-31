@@ -225,6 +225,13 @@ const HorseAnalysisApp = () => {
   const [selectedLockedRace, setSelectedLockedRace] = useState(null);
   const [passcodeError, setPasscodeError] = useState('');
 
+  // ✨ ファクター分析用のstate
+  const [showFactorAnalysisModal, setShowFactorAnalysisModal] = useState(false);
+  const [selectedAnalysisCourse, setSelectedAnalysisCourse] = useState(null);
+  const [selectedAnalysisDistance, setSelectedAnalysisDistance] = useState(null);
+  const [factorAnalysisResults, setFactorAnalysisResults] = useState(null);
+  const [courseDistanceMap, setCourseDistanceMap] = useState({});
+
   const factors = [
     { name: '能力値', weight: 15, key: 'タイム指数' },
     { name: 'コース・距離適性', weight: 18, key: 'コース・距離適性' },
@@ -291,6 +298,11 @@ const HorseAnalysisApp = () => {
       }
     });
   }, []);
+
+  // ✨ ファクター分析用useEffect
+  useEffect(() => {
+    setCourseDistanceMap(getDistinctCourseDistances());
+  }, [races]);
 
   const parseHorseData = (text) => {
     const lines = text.trim().split('\n');
@@ -882,6 +894,114 @@ const HorseAnalysisApp = () => {
     };
   };
 
+  // ✨ ファクター毎の的中率分析関数
+  const calculateFactorStats = (courseKey = null, distance = null) => {
+    let recordedRaces = races.filter(r => r.result && r.odds && Object.keys(r.odds).length > 0);
+    
+    if (courseKey && courseKey !== 'all') {
+      recordedRaces = recordedRaces.filter(r => r.courseKey === courseKey);
+    }
+    
+    if (distance) {
+      recordedRaces = recordedRaces.filter(r => {
+        const raceName = r.name;
+        const distanceMatch = raceName.match(/(\d{3,4})/);
+        if (distanceMatch) {
+          const raceDistance = parseInt(distanceMatch[1]);
+          return Math.abs(raceDistance - distance) < 100;
+        }
+        return false;
+      });
+    }
+    
+    if (recordedRaces.length === 0) return null;
+
+    const factorStats = {
+      'スピード能力値': { tansho: 0, fukusho: 0, total: 0 },
+      'コース・距離適性': { tansho: 0, fukusho: 0, total: 0 },
+      '展開利': { tansho: 0, fukusho: 0, total: 0 },
+      '近走安定度': { tansho: 0, fukusho: 0, total: 0 },
+      '馬場適性': { tansho: 0, fukusho: 0, total: 0 },
+      '騎手': { tansho: 0, fukusho: 0, total: 0 },
+      '斤量': { tansho: 0, fukusho: 0, total: 0 },
+      '調教': { tansho: 0, fukusho: 0, total: 0 }
+    };
+
+    recordedRaces.forEach(race => {
+      const ranking = race.result.ranking.split(/[\s\-,]/);
+      const resultNums = ranking.map(r => {
+        const num = parseInt(r);
+        return isNaN(num) ? null : num;
+      }).filter(n => n !== null);
+
+      if (resultNums.length === 0) return;
+
+      Object.keys(factorStats).forEach(factorKey => {
+        const topHorseByFactor = race.horses
+          .filter(h => !excludedHorses[h.horseNum])
+          .reduce((top, horse) => {
+            const score = horse.scores[factorKey] || 0;
+            return score > (top.scores[factorKey] || 0) ? horse : top;
+          }, race.horses[0]);
+
+        if (topHorseByFactor) {
+          factorStats[factorKey].total++;
+
+          if (resultNums[0] === topHorseByFactor.horseNum) {
+            factorStats[factorKey].tansho++;
+          }
+
+          if (resultNums.slice(0, 3).includes(topHorseByFactor.horseNum)) {
+            factorStats[factorKey].fukusho++;
+          }
+        }
+      });
+    });
+
+    const result = {};
+    Object.entries(factorStats).forEach(([factor, stats]) => {
+      result[factor] = {
+        ...stats,
+        tanshoRate: stats.total > 0 ? ((stats.tansho / stats.total) * 100).toFixed(1) : '0.0',
+        fukushoRate: stats.total > 0 ? ((stats.fukusho / stats.total) * 100).toFixed(1) : '0.0'
+      };
+    });
+
+    return { results: result, recordedRacesCount: recordedRaces.length };
+  };
+
+  // 🏟️ コース一覧と距離を取得
+  const getDistinctCourseDistances = () => {
+    const coursesData = {};
+    races.forEach(race => {
+      if (race.result) {
+        const courseKey = race.courseKey || 'デフォルト';
+        const raceName = race.name;
+        const distanceMatch = raceName.match(/(\d{3,4})/);
+        
+        if (distanceMatch) {
+          const distance = parseInt(distanceMatch[1]);
+          if (!coursesData[courseKey]) {
+            coursesData[courseKey] = new Set();
+          }
+          coursesData[courseKey].add(distance);
+        }
+      }
+    });
+
+    const result = {};
+    Object.entries(coursesData).forEach(([course, distances]) => {
+      result[course] = Array.from(distances).sort((a, b) => a - b);
+    });
+
+    return result;
+  };
+
+  const handleAnalyzeFactors = () => {
+    const analysisResults = calculateFactorStats(selectedAnalysisCourse, selectedAnalysisDistance);
+    setFactorAnalysisResults(analysisResults);
+  };
+
   const handleFactorToggle = (factorKey) => {
     setSelectedFactors({
       ...selectedFactors,
@@ -1024,6 +1144,20 @@ const HorseAnalysisApp = () => {
             >
               <BarPixelArt size={20} />
               成績分析
+            </button>
+            <button
+              onClick={() => {
+                setActiveTab('factor-analysis');
+                setShowFactorAnalysisModal(true);
+              }}
+              className={`px-4 md:px-8 py-2 md:py-3 rounded-full font-bold text-sm md:text-base shadow-lg hover:shadow-2xl hover:scale-105 transition transform flex items-center gap-2 ${
+                activeTab === 'factor-analysis'
+                  ? 'bg-gradient-to-r from-purple-400 to-purple-500 text-white'
+                  : 'bg-white text-gray-700 hover:bg-gray-100'
+              }`}
+            >
+              <BarPixelArt size={20} />
+              ファクター分析
             </button>
           </div>
 
@@ -1288,6 +1422,124 @@ const HorseAnalysisApp = () => {
                   {statsType === 'winrate' && '結果が記録されたレースがありません'}
                 </p>
               )}
+            </div>
+          )}
+
+          {showFactorAnalysisModal && (
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+              <div className="bg-white rounded-3xl p-8 max-w-2xl w-full shadow-2xl max-h-[90vh] overflow-y-auto">
+                <div className="flex items-center gap-3 mb-6">
+                  <BarPixelArt size={32} />
+                  <h2 className="text-2xl font-bold text-gray-800">ファクター毎の的中率分析</h2>
+                </div>
+
+                {!factorAnalysisResults ? (
+                  <div className="space-y-6">
+                    <div>
+                      <label className="block text-sm font-bold text-gray-700 mb-3">コースを選択</label>
+                      <select
+                        value={selectedAnalysisCourse || ''}
+                        onChange={(e) => setSelectedAnalysisCourse(e.target.value || null)}
+                        className="w-full px-4 py-3 border-2 border-purple-300 rounded-2xl focus:outline-none focus:border-purple-500 font-bold"
+                      >
+                        <option value="">全コース</option>
+                        {Object.keys(courseDistanceMap).map(course => (
+                          <option key={course} value={course}>{course}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {selectedAnalysisCourse && courseDistanceMap[selectedAnalysisCourse]?.length > 0 && (
+                      <div>
+                        <label className="block text-sm font-bold text-gray-700 mb-3">距離を選択（オプション）</label>
+                        <select
+                          value={selectedAnalysisDistance || ''}
+                          onChange={(e) => setSelectedAnalysisDistance(e.target.value ? parseInt(e.target.value) : null)}
+                          className="w-full px-4 py-3 border-2 border-purple-300 rounded-2xl focus:outline-none focus:border-purple-500 font-bold"
+                        >
+                          <option value="">すべての距離</option>
+                          {courseDistanceMap[selectedAnalysisCourse].map(distance => (
+                            <option key={distance} value={distance}>{distance}m</option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+
+                    <button
+                      onClick={handleAnalyzeFactors}
+                      className="w-full px-6 py-3 bg-gradient-to-r from-purple-400 to-purple-500 text-white rounded-full font-bold shadow-lg hover:shadow-2xl hover:scale-105 transition flex items-center justify-center gap-2"
+                    >
+                      <StarPixelArt size={20} />
+                      分析を実行
+                    </button>
+                  </div>
+                ) : (
+                  <div className="space-y-6">
+                    <div className="p-4 bg-purple-100 rounded-2xl border-2 border-purple-300">
+                      <p className="text-sm text-purple-800 font-bold">
+                        📊 対象レース: {factorAnalysisResults.recordedRacesCount}レース
+                        {selectedAnalysisCourse && ` (${selectedAnalysisCourse})`}
+                        {selectedAnalysisDistance && ` (${selectedAnalysisDistance}m)`}
+                      </p>
+                    </div>
+
+                    <div className="space-y-3">
+                      {Object.entries(factorAnalysisResults.results)
+                        .sort((a, b) => parseFloat(b[1].tanshoRate) - parseFloat(a[1].tanshoRate))
+                        .map(([factor, stats]) => (
+                          <div key={factor} className="p-4 bg-gradient-to-r from-purple-50 to-blue-50 rounded-2xl border-2 border-purple-200">
+                            <div className="flex justify-between items-start mb-3">
+                              <h3 className="font-bold text-gray-800 text-lg">{factor}</h3>
+                              <span className="text-xs text-gray-600 font-bold">（{stats.total}レース）</span>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-4">
+                              <div className="bg-white p-3 rounded-xl border-2 border-pink-300">
+                                <div className="text-xs text-gray-600 font-bold mb-1">単勝的中率</div>
+                                <div className="text-2xl font-black text-pink-600">{stats.tanshoRate}%</div>
+                                <div className="text-xs text-gray-600 mt-1 font-bold">{stats.tansho}/{stats.total}</div>
+                              </div>
+                              <div className="bg-white p-3 rounded-xl border-2 border-purple-300">
+                                <div className="text-xs text-gray-600 font-bold mb-1">複勝的中率</div>
+                                <div className="text-2xl font-black text-purple-600">{stats.fukushoRate}%</div>
+                                <div className="text-xs text-gray-600 mt-1 font-bold">{stats.fukusho}/{stats.total}</div>
+                              </div>
+                            </div>
+
+                            <div className="mt-3 flex items-end gap-1 h-12">
+                              <div className="flex-1 bg-pink-300 rounded-t opacity-70" style={{height: `${parseFloat(stats.tanshoRate) * 1.5}px`}}></div>
+                              <div className="flex-1 bg-purple-300 rounded-t opacity-70" style={{height: `${parseFloat(stats.fukushoRate) * 1.5}px`}}></div>
+                            </div>
+                          </div>
+                        ))}
+                    </div>
+
+                    <button
+                      onClick={() => {
+                        setFactorAnalysisResults(null);
+                        setSelectedAnalysisCourse(null);
+                        setSelectedAnalysisDistance(null);
+                      }}
+                      className="w-full px-6 py-3 bg-gray-400 text-white rounded-full font-bold hover:bg-gray-500 transition"
+                    >
+                      条件を変更して再分析
+                    </button>
+                  </div>
+                )}
+
+                <button
+                  onClick={() => {
+                    setShowFactorAnalysisModal(false);
+                    setFactorAnalysisResults(null);
+                    setSelectedAnalysisCourse(null);
+                    setSelectedAnalysisDistance(null);
+                    setActiveTab('races-upcoming');
+                  }}
+                  className="w-full mt-4 px-6 py-3 bg-gray-300 text-gray-800 rounded-full font-bold hover:bg-gray-400 transition"
+                >
+                  閉じる
+                </button>
+              </div>
             </div>
           )}
 
