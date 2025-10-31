@@ -1371,8 +1371,33 @@ const HorseAnalysisApp = () => {
                 <h3 className="text-2xl font-bold mb-6 text-gray-800">管理者パスコード</h3>
                 
                 {isAdmin && (
-                  <div className="mb-6 p-4 bg-green-100 border-2 border-green-400 rounded-2xl text-sm text-green-800 font-bold">
-                    ✓ 管理者モード有効
+                  <div className="mb-6">
+                    <div className="p-4 bg-green-100 border-2 border-green-400 rounded-2xl text-sm text-green-800 font-bold mb-4">
+                      ✓ 管理者モード有効
+                    </div>
+                    
+                    <div className="p-4 bg-blue-50 border-2 border-blue-300 rounded-2xl">
+                      <div className="flex items-center justify-between mb-3">
+                        <span className="text-sm font-bold text-gray-700">現在のバージョン</span>
+                        <span className="text-lg font-black text-blue-600">{APP_VERSION}</span>
+                      </div>
+                      <button
+                        onClick={() => {
+                          const versionRef = ref(database, 'appVersion');
+                          set(versionRef, APP_VERSION).then(() => {
+                            alert(`✅ Firebaseのバージョンを ${APP_VERSION} に更新しました！\n\n古いバージョンを開いている全ユーザーに更新通知が送られます。`);
+                          }).catch((error) => {
+                            alert('❌ 更新に失敗しました: ' + error.message);
+                          });
+                        }}
+                        className="w-full px-4 py-2 bg-gradient-to-r from-blue-400 to-blue-500 text-white rounded-full font-bold text-sm shadow-lg hover:shadow-2xl hover:scale-105 transition"
+                      >
+                        🔄 全ユーザーに更新を配信
+                      </button>
+                      <p className="text-xs text-gray-600 mt-2 text-center">
+                        このボタンを押すと全員に最新版への更新が促されます
+                      </p>
+                    </div>
                   </div>
                 )}
 
