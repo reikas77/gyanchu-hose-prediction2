@@ -153,6 +153,9 @@ const HorseAnalysisApp = () => {
   const [races, setRaces] = useState([]);
   const [currentRace, setCurrentRace] = useState(null);
   const [pasteText, setPasteText] = useState('');
+  const [inputMode, setInputMode] = useState('paste'); // 'paste' または 'manual'
+  const [manualHorses, setManualHorses] = useState([]);
+  const [editingHorse, setEditingHorse] = useState(null);
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [raceName, setRaceName] = useState('');
   const [importMessage, setImportMessage] = useState('');
@@ -297,6 +300,51 @@ const HorseAnalysisApp = () => {
     });
   }, []);
 
+  const addManualHorse = () => {
+    const newHorse = {
+      horseNum: manualHorses.length + 1,
+      name: '',
+      scores: {
+        'スピード能力値': 50,
+        'コース・距離適性': 50,
+        '展開利': 50,
+        '近走安定度': 50,
+        '馬場適性': 50,
+        '騎手': 50,
+        '斤量': 50,
+        '調教': 50
+      }
+    };
+    setManualHorses([...manualHorses, newHorse]);
+    setEditingHorse(newHorse.horseNum);
+  };
+
+  const updateManualHorse = (horseNum, field, value) => {
+    setManualHorses(manualHorses.map(h => 
+      h.horseNum === horseNum 
+        ? { ...h, [field]: value }
+        : h
+    ));
+  };
+
+  const updateManualHorseScore = (horseNum, factor, value) => {
+    setManualHorses(manualHorses.map(h => 
+      h.horseNum === horseNum 
+        ? { ...h, scores: { ...h.scores, [factor]: parseFloat(value) || 0 } }
+        : h
+    ));
+  };
+
+  const deleteManualHorse = (horseNum) => {
+    const filtered = manualHorses.filter(h => h.horseNum !== horseNum);
+    // 馬番を振り直す
+    const renumbered = filtered.map((h, idx) => ({
+      ...h,
+      horseNum: idx + 1
+    }));
+    setManualHorses(renumbered);
+  };
+
   const parseHorseData = (text) => {
     const lines = text.trim().split('\n');
     const horses = [];
@@ -353,8 +401,8 @@ const HorseAnalysisApp = () => {
   };
 
   const handleDataImport = () => {
-    if (!pasteText.trim() || !raceName.trim()) {
-      setImportMessage('レース名またはデータが入力されていません');
+    if (!raceName.trim()) {
+      setImportMessage('レース名を入力してください');
       setImportMessageType('error');
       setTimeout(() => setImportMessage(''), 3000);
       return;
@@ -375,7 +423,36 @@ const HorseAnalysisApp = () => {
       return;
     }
 
-    const horses = parseHorseData(pasteText);
+    let horses = [];
+
+    if (inputMode === 'paste') {
+      if (!pasteText.trim()) {
+        setImportMessage('データが入力されていません');
+        setImportMessageType('error');
+        setTimeout(() => setImportMessage(''), 3000);
+        return;
+      }
+      horses = parseHorseData(pasteText);
+    } else {
+      // 手入力モード
+      if (manualHorses.length === 0) {
+        setImportMessage('馬を1頭以上追加してください');
+        setImportMessageType('error');
+        setTimeout(() => setImportMessage(''), 3000);
+        return;
+      }
+      
+      // 馬名の入力チェック
+      const emptyNames = manualHorses.filter(h => !h.name.trim());
+      if (emptyNames.length > 0) {
+        setImportMessage('すべての馬に名前を入力してください');
+        setImportMessageType('error');
+        setTimeout(() => setImportMessage(''), 3000);
+        return;
+      }
+      
+      horses = manualHorses;
+    }
     
     if (horses.length === 0) {
       setImportMessage('データの解析に失敗しました。形式を確認してください。');
@@ -396,7 +473,7 @@ const HorseAnalysisApp = () => {
       expCoefficient: 0.1,
       createdBy: userId,
       createdTime: new Date().toISOString(),
-      passcode: racePasscode || null // 🔒 パスコードを保存（nullの場合は誰でも閲覧可能）
+      passcode: racePasscode || null
     };
 
     const racesRef = ref(database, 'races');
@@ -404,7 +481,9 @@ const HorseAnalysisApp = () => {
 
     setPasteText('');
     setRaceName('');
-    setRacePasscode(''); // 🔒 パスコードもクリア
+    setRacePasscode('');
+    setManualHorses([]);
+    setInputMode('paste');
     setImportMessage(`${raceName}を追加しました！（${horses.length}頭）${racePasscode ? ' 🔒パスコード設定済み' : ''}`);
     setImportMessageType('success');
     setTimeout(() => {
@@ -1511,7 +1590,7 @@ const HorseAnalysisApp = () => {
 
           {showUploadModal && (
             <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-              <div className="bg-white rounded-3xl p-8 max-w-2xl w-full shadow-2xl">
+              <div className="bg-white rounded-3xl p-8 max-w-4xl w-full shadow-2xl max-h-[90vh] overflow-y-auto">
                 <h3 className="text-2xl font-bold mb-6 text-gray-800 flex items-center gap-2">
                   <HorsePixelArt size={28} />
                   レースデータを追加
@@ -1552,7 +1631,6 @@ const HorseAnalysisApp = () => {
                   </select>
                 </div>
 
-                {/* 🔒 パスコード入力欄を追加 */}
                 <div className="mb-6">
                   <label className="block text-sm font-bold text-gray-700 mb-2 flex items-center gap-2">
                     <LockPixelArt size={20} />
@@ -1575,15 +1653,113 @@ const HorseAnalysisApp = () => {
                   </p>
                 </div>
 
+                {/* 入力モード選択 */}
                 <div className="mb-6">
-                  <label className="block text-sm font-bold text-gray-700 mb-2">データ（コピペ）</label>
-                  <textarea
-                    value={pasteText}
-                    onChange={(e) => setPasteText(e.target.value)}
-                    className="w-full h-48 p-4 border-2 border-pink-300 rounded-2xl font-mono text-sm focus:outline-none focus:border-pink-500"
-                    placeholder="データをここにペーストしてください"
-                  />
+                  <label className="block text-sm font-bold text-gray-700 mb-3">データ入力方法</label>
+                  <div className="flex gap-4">
+                    <button
+                      onClick={() => setInputMode('paste')}
+                      className={`flex-1 px-4 py-3 rounded-2xl font-bold transition ${
+                        inputMode === 'paste'
+                          ? 'bg-gradient-to-r from-pink-400 to-pink-500 text-white'
+                          : 'bg-gray-200 text-gray-800 hover:bg-gray-300'
+                      }`}
+                    >
+                      📋 コピペ入力
+                    </button>
+                    <button
+                      onClick={() => setInputMode('manual')}
+                      className={`flex-1 px-4 py-3 rounded-2xl font-bold transition ${
+                        inputMode === 'manual'
+                          ? 'bg-gradient-to-r from-blue-400 to-blue-500 text-white'
+                          : 'bg-gray-200 text-gray-800 hover:bg-gray-300'
+                      }`}
+                    >
+                      ✏️ 手入力
+                    </button>
+                  </div>
                 </div>
+
+                {/* コピペモード */}
+                {inputMode === 'paste' && (
+                  <div className="mb-6">
+                    <label className="block text-sm font-bold text-gray-700 mb-2">データ（コピペ）</label>
+                    <textarea
+                      value={pasteText}
+                      onChange={(e) => setPasteText(e.target.value)}
+                      className="w-full h-48 p-4 border-2 border-pink-300 rounded-2xl font-mono text-sm focus:outline-none focus:border-pink-500"
+                      placeholder="データをここにペーストしてください"
+                    />
+                  </div>
+                )}
+
+                {/* 手入力モード */}
+                {inputMode === 'manual' && (
+                  <div className="mb-6">
+                    <div className="flex justify-between items-center mb-4">
+                      <label className="block text-sm font-bold text-gray-700">出走馬リスト</label>
+                      <button
+                        onClick={addManualHorse}
+                        className="px-4 py-2 bg-gradient-to-r from-blue-400 to-blue-500 text-white rounded-full font-bold text-sm shadow-lg hover:shadow-2xl transition"
+                      >
+                        ➕ 馬を追加
+                      </button>
+                    </div>
+
+                    <div className="space-y-3 max-h-96 overflow-y-auto">
+                      {manualHorses.map((horse) => (
+                        <div key={horse.horseNum} className="p-4 bg-gradient-to-br from-blue-50 to-purple-50 rounded-2xl border-2 border-blue-200">
+                          <div className="flex justify-between items-start mb-3">
+                            <div className="flex items-center gap-3 flex-1">
+                              <span className="font-bold text-blue-600 text-lg">{horse.horseNum}.</span>
+                              <input
+                                type="text"
+                                value={horse.name}
+                                onChange={(e) => updateManualHorse(horse.horseNum, 'name', e.target.value)}
+                                placeholder="馬名"
+                                className="flex-1 px-3 py-2 border-2 border-blue-300 rounded-lg text-sm focus:outline-none focus:border-blue-500"
+                              />
+                            </div>
+                            <button
+                              onClick={() => deleteManualHorse(horse.horseNum)}
+                              className="p-2 text-red-500 hover:bg-red-50 rounded-full transition ml-2"
+                            >
+                              🗑️
+                            </button>
+                          </div>
+
+                          {editingHorse === horse.horseNum && (
+                            <div className="grid grid-cols-2 gap-2 mt-3 pt-3 border-t-2 border-blue-300">
+                              {Object.entries(horse.scores).map(([factor, score]) => (
+                                <div key={factor} className="flex items-center gap-2">
+                                  <label className="text-xs font-bold text-gray-700 w-32">{factor}</label>
+                                  <input
+                                    type="number"
+                                    step="0.1"
+                                    value={score}
+                                    onChange={(e) => updateManualHorseScore(horse.horseNum, factor, e.target.value)}
+                                    className="w-20 px-2 py-1 border-2 border-blue-300 rounded-lg text-xs focus:outline-none focus:border-blue-500"
+                                  />
+                                </div>
+                              ))}
+                            </div>
+                          )}
+
+                          <button
+                            onClick={() => setEditingHorse(editingHorse === horse.horseNum ? null : horse.horseNum)}
+                            className="mt-3 w-full px-3 py-2 bg-blue-400 text-white rounded-lg font-bold text-xs hover:bg-blue-500 transition"
+                          >
+                            {editingHorse === horse.horseNum ? '▲ 閉じる' : '▼ ファクターを編集'}
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+
+                    {manualHorses.length === 0 && (
+                      <p className="text-gray-500 text-center py-8">「馬を追加」ボタンで出走馬を登録してください</p>
+                    )}
+                  </div>
+                )}
 
                 <div className="flex gap-4">
                   <button
@@ -1598,6 +1774,8 @@ const HorseAnalysisApp = () => {
                       setPasteText('');
                       setRaceName('');
                       setRacePasscode('');
+                      setManualHorses([]);
+                      setInputMode('paste');
                       setImportMessage('');
                       setSelectedCourse(null);
                     }}
@@ -2134,15 +2312,15 @@ const HorseAnalysisApp = () => {
             )}
           </div>
           <div className="p-4 bg-gradient-to-br from-blue-50 to-purple-50 rounded-2xl border-2 border-blue-200 min-h-32">
-  {memo ? (
-    <div 
-  className="text-gray-700 font-bold whitespace-pre-wrap"
-  dangerouslySetInnerHTML={{ __html: memo }}
-/>
-  ) : (
-    <p className="text-gray-500 font-bold">（メモなし）</p>
-  )}
-</div>
+            {memo ? (
+              <div 
+                className="text-gray-700 font-bold whitespace-pre-wrap"
+                dangerouslySetInnerHTML={{ __html: memo }}
+              />
+            ) : (
+              <p className="text-gray-500 font-bold">（メモなし）</p>
+            )}
+          </div>
         </div>
 
         {showCourseSelectModal && isAdmin && (
@@ -2296,97 +2474,97 @@ const HorseAnalysisApp = () => {
               </h3>
               
               {/* 書式設定ツールバー */}
-<div className="flex gap-2 mb-3 p-3 bg-gray-100 rounded-2xl flex-wrap">
-  <button
-    onClick={() => document.execCommand('bold')}
-    className="px-3 py-2 bg-white rounded-lg font-bold hover:bg-blue-100 transition border-2 border-gray-300"
-    title="太字"
-  >
-    <span className="font-bold">B</span>
-  </button>
-  <button
-    onClick={() => document.execCommand('italic')}
-    className="px-3 py-2 bg-white rounded-lg italic hover:bg-blue-100 transition border-2 border-gray-300"
-    title="斜体"
-  >
-    <span className="italic">I</span>
-  </button>
-  <button
-    onClick={() => document.execCommand('underline')}
-    className="px-3 py-2 bg-white rounded-lg underline hover:bg-blue-100 transition border-2 border-gray-300"
-    title="下線"
-  >
-    <span className="underline">U</span>
-  </button>
-  <div className="h-8 w-px bg-gray-400 mx-2"></div>
-  <button
-    onClick={() => document.execCommand('foreColor', false, '#ef4444')}
-    className="px-3 py-2 bg-white rounded-lg hover:bg-red-100 transition border-2 border-gray-300"
-    title="赤"
-  >
-    <span className="text-red-500 font-bold">A</span>
-  </button>
-  <button
-    onClick={() => document.execCommand('foreColor', false, '#3b82f6')}
-    className="px-3 py-2 bg-white rounded-lg hover:bg-blue-100 transition border-2 border-gray-300"
-    title="青"
-  >
-    <span className="text-blue-500 font-bold">A</span>
-  </button>
-  <button
-    onClick={() => document.execCommand('foreColor', false, '#22c55e')}
-    className="px-3 py-2 bg-white rounded-lg hover:bg-green-100 transition border-2 border-gray-300"
-    title="緑"
-  >
-    <span className="text-green-500 font-bold">A</span>
-  </button>
-  <button
-    onClick={() => document.execCommand('foreColor', false, '#a855f7')}
-    className="px-3 py-2 bg-white rounded-lg hover:bg-purple-100 transition border-2 border-gray-300"
-    title="紫"
-  >
-    <span className="text-purple-500 font-bold">A</span>
-  </button>
-  <button
-    onClick={() => document.execCommand('foreColor', false, '#000000')}
-    className="px-3 py-2 bg-white rounded-lg hover:bg-gray-200 transition border-2 border-gray-300"
-    title="黒"
-  >
-    <span className="text-black font-bold">A</span>
-  </button>
-  <div className="h-8 w-px bg-gray-400 mx-2"></div>
-  <button
-    onClick={() => document.execCommand('removeFormat')}
-    className="px-3 py-2 bg-white rounded-lg hover:bg-gray-200 transition border-2 border-gray-300 text-sm"
-    title="書式をクリア"
-  >
-    🧹 クリア
-  </button>
-</div>
+              <div className="flex gap-2 mb-3 p-3 bg-gray-100 rounded-2xl flex-wrap">
+                <button
+                  onClick={() => document.execCommand('bold')}
+                  className="px-3 py-2 bg-white rounded-lg font-bold hover:bg-blue-100 transition border-2 border-gray-300"
+                  title="太字"
+                >
+                  <span className="font-bold">B</span>
+                </button>
+                <button
+                  onClick={() => document.execCommand('italic')}
+                  className="px-3 py-2 bg-white rounded-lg italic hover:bg-blue-100 transition border-2 border-gray-300"
+                  title="斜体"
+                >
+                  <span className="italic">I</span>
+                </button>
+                <button
+                  onClick={() => document.execCommand('underline')}
+                  className="px-3 py-2 bg-white rounded-lg underline hover:bg-blue-100 transition border-2 border-gray-300"
+                  title="下線"
+                >
+                  <span className="underline">U</span>
+                </button>
+                <div className="h-8 w-px bg-gray-400 mx-2"></div>
+                <button
+                  onClick={() => document.execCommand('foreColor', false, '#ef4444')}
+                  className="px-3 py-2 bg-white rounded-lg hover:bg-red-100 transition border-2 border-gray-300"
+                  title="赤"
+                >
+                  <span className="text-red-500 font-bold">A</span>
+                </button>
+                <button
+                  onClick={() => document.execCommand('foreColor', false, '#3b82f6')}
+                  className="px-3 py-2 bg-white rounded-lg hover:bg-blue-100 transition border-2 border-gray-300"
+                  title="青"
+                >
+                  <span className="text-blue-500 font-bold">A</span>
+                </button>
+                <button
+                  onClick={() => document.execCommand('foreColor', false, '#22c55e')}
+                  className="px-3 py-2 bg-white rounded-lg hover:bg-green-100 transition border-2 border-gray-300"
+                  title="緑"
+                >
+                  <span className="text-green-500 font-bold">A</span>
+                </button>
+                <button
+                  onClick={() => document.execCommand('foreColor', false, '#a855f7')}
+                  className="px-3 py-2 bg-white rounded-lg hover:bg-purple-100 transition border-2 border-gray-300"
+                  title="紫"
+                >
+                  <span className="text-purple-500 font-bold">A</span>
+                </button>
+                <button
+                  onClick={() => document.execCommand('foreColor', false, '#000000')}
+                  className="px-3 py-2 bg-white rounded-lg hover:bg-gray-200 transition border-2 border-gray-300"
+                  title="黒"
+                >
+                  <span className="text-black font-bold">A</span>
+                </button>
+                <div className="h-8 w-px bg-gray-400 mx-2"></div>
+                <button
+                  onClick={() => document.execCommand('removeFormat')}
+                  className="px-3 py-2 bg-white rounded-lg hover:bg-gray-200 transition border-2 border-gray-300 text-sm"
+                  title="書式をクリア"
+                >
+                  🧹 クリア
+                </button>
+              </div>
 
-<div
-  ref={(el) => {
-    if (el && !el.innerHTML && memo) {
-      el.innerHTML = memo.replace(/\n/g, '<br>');
-    }
-  }}
-  contentEditable
-  onInput={(e) => setMemo(e.currentTarget.innerHTML)}
-  onKeyDown={(e) => {
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      document.execCommand('insertHTML', false, '<br><br>');
-    }
-  }}
-  className="w-full min-h-48 p-4 border-2 border-blue-300 rounded-2xl text-sm mb-6 focus:outline-none focus:border-blue-500 bg-white overflow-y-auto max-h-96"
-  style={{ whiteSpace: 'pre-wrap' }}
-  suppressContentEditableWarning
->
-</div>
+              <div
+                ref={(el) => {
+                  if (el && !el.innerHTML && memo) {
+                    el.innerHTML = memo.replace(/\n/g, '<br>');
+                  }
+                }}
+                contentEditable
+                onInput={(e) => setMemo(e.currentTarget.innerHTML)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    document.execCommand('insertHTML', false, '<br><br>');
+                  }
+                }}
+                className="w-full min-h-48 p-4 border-2 border-blue-300 rounded-2xl text-sm mb-6 focus:outline-none focus:border-blue-500 bg-white overflow-y-auto max-h-96"
+                style={{ whiteSpace: 'pre-wrap' }}
+                suppressContentEditableWarning
+              >
+              </div>
 
-<div className="p-3 bg-blue-50 rounded-2xl text-xs text-blue-800 font-bold mb-6 border-2 border-blue-200">
-  💡 ヒント: テキストを選択してから書式ボタンを押すと、選択部分に書式が適用されます
-</div>
+              <div className="p-3 bg-blue-50 rounded-2xl text-xs text-blue-800 font-bold mb-6 border-2 border-blue-200">
+                💡 ヒント: テキストを選択してから書式ボタンを押すと、選択部分に書式が適用されます
+              </div>
 
               <div className="flex gap-4">
                 <button
