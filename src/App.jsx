@@ -119,6 +119,20 @@ const TrophyPixelArt = ({ size = 24 }) => (
   </svg>
 );
 
+// 🎲 新規追加：サイコロのアイコン
+const DicePixelArt = ({ size = 24 }) => (
+  <svg width={size} height={size} viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+    {/* サイコロ本体 */}
+    <rect x="2" y="2" width="12" height="12" fill="#FFFFFF" stroke="#000000" strokeWidth="1" rx="2" />
+    {/* サイコロの点 */}
+    <circle cx="5" cy="5" r="1" fill="#000000" />
+    <circle cx="8" cy="8" r="1" fill="#000000" />
+    <circle cx="11" cy="11" r="1" fill="#000000" />
+    <circle cx="11" cy="5" r="1" fill="#000000" />
+    <circle cx="5" cy="11" r="1" fill="#000000" />
+  </svg>
+);
+
 // Firebase設定
 const firebaseConfig = {
   apiKey: "AIzaSyBLXleQ28dQR-uDTKlYXSevefzc0vowh9k",
@@ -137,7 +151,7 @@ const auth = getAuth(app);
 
 const HorseAnalysisApp = () => {
   // アプリのバージョン（更新時にこの数字を増やす）
-  const APP_VERSION = '2.0.0';
+  const APP_VERSION = '3.0.0'; // 仮想レース機能追加版
   
   // 初回レンダリング時にバージョンチェック
   useEffect(() => {
@@ -214,6 +228,12 @@ const HorseAnalysisApp = () => {
   const [showExpModal, setShowExpModal] = useState(false);
   const [tempExpCoefficient, setTempExpCoefficient] = useState(0.1);
 
+  // 🎲 新規追加：仮想レース関連のstate
+  const [showVirtualRaceModal, setShowVirtualRaceModal] = useState(false);
+  const [virtualRaceResults, setVirtualRaceResults] = useState(null);
+  const [simulationCount, setSimulationCount] = useState(100);
+  const [isSimulating, setIsSimulating] = useState(false);
+
   const [showBettingModal, setShowBettingModal] = useState(false);
   const [bettingBudget, setBettingBudget] = useState(1000);
   const [bettingType, setBettingType] = useState('accuracy');
@@ -243,6 +263,135 @@ const HorseAnalysisApp = () => {
     { name: '斤量', weight: 10, key: '斤量' },
     { name: '調教', weight: 15, key: '調教' }
   ];
+
+  // 🎲 仮想レースシミュレーター関数群
+  
+  // 勝率を再配分(合計100%に正規化)
+  const redistributeRates = (remaining) => {
+    const total = Object.values(remaining).reduce((a, b) => a + b, 0);
+    const redistributed = {};
+    
+    for (const [horse, rate] of Object.entries(remaining)) {
+      redistributed[horse] = (rate / total) * 100;
+    }
+    
+    return redistributed;
+  };
+  
+  // 勝率に基づいて1頭を抽選
+  const drawHorse = (horsesDict) => {
+    const horses = Object.keys(horsesDict);
+    const rates = Object.values(horsesDict);
+    
+    // 0-100の乱数を生成
+    const rand = Math.random() * 100;
+    
+    // 累積確率で抽選
+    let cumulative = 0;
+    for (let i = 0; i < horses.length; i++) {
+      cumulative += rates[i];
+      if (rand <= cumulative) {
+        return horses[i];
+      }
+    }
+    
+    // 浮動小数点誤差対策で最後の馬を返す
+    return horses[horses.length - 1];
+  };
+  
+  // 1回のレースをシミュレーション
+  const simulateOneRace = (horses) => {
+    const result = [];
+    let remaining = { ...horses };
+    
+    // 1着の決定
+    const first = drawHorse(remaining);
+    result.push(first);
+    delete remaining[first];
+    
+    // 2着の決定(勝率を再配分)
+    remaining = redistributeRates(remaining);
+    const second = drawHorse(remaining);
+    result.push(second);
+    delete remaining[second];
+    
+    // 3着の決定(勝率を再配分)
+    remaining = redistributeRates(remaining);
+    const third = drawHorse(remaining);
+    result.push(third);
+    
+    return result;
+  };
+  
+  // 仮想レースシミュレーション実行
+  const runVirtualRaceSimulation = () => {
+    if (!currentRace || !currentRace.horses || currentRace.horses.length < 3) {
+      alert('レースデータが不足しています。最低3頭の馬が必要です。');
+      return;
+    }
+    
+    setIsSimulating(true);
+    
+    // 少し遅延を入れてアニメーション効果を出す
+    setTimeout(() => {
+      // 各馬の期待勝率を計算
+      const horses = {};
+      const totalScore = currentRace.horses.reduce((sum, h) => sum + (h.winRate || 0), 0);
+      
+      if (totalScore === 0) {
+        alert('馬の勝率が計算されていません。');
+        setIsSimulating(false);
+        return;
+      }
+      
+      currentRace.horses.forEach(h => {
+        const horseKey = `${h.horseNum}番 ${h.name}`;
+        horses[horseKey] = h.winRate || 0;
+      });
+      
+      // 集計カウンター初期化
+      const results = {};
+      for (const horse of Object.keys(horses)) {
+        results[horse] = {
+          '1着': 0,
+          '2着': 0,
+          '3着': 0,
+          '4着以下': 0,
+          '期待勝率': horses[horse]
+        };
+      }
+      
+      // シミュレーション実行
+      for (let i = 0; i < simulationCount; i++) {
+        const raceResult = simulateOneRace(horses);
+        
+        // 1着、2着、3着のカウント
+        results[raceResult[0]]['1着']++;
+        results[raceResult[1]]['2着']++;
+        results[raceResult[2]]['3着']++;
+        
+        // 4着以下(着外)のカウント
+        const top3 = new Set(raceResult);
+        for (const horse of Object.keys(horses)) {
+          if (!top3.has(horse)) {
+            results[horse]['4着以下']++;
+          }
+        }
+      }
+      
+      // 1着回数でソート
+      const sortedResults = Object.entries(results).sort((a, b) => b[1]['1着'] - a[1]['1着']);
+      
+      setVirtualRaceResults({
+        results: sortedResults,
+        simulationCount: simulationCount,
+        raceName: currentRace.raceName || '未設定'
+      });
+      
+      setIsSimulating(false);
+    }, 500);
+  };
+
 
   // Firebase認証とデータ同期
   useEffect(() => {
@@ -2170,6 +2319,16 @@ const HorseAnalysisApp = () => {
                 <TrophyPixelArt size={16} />
                 買い目生成
               </button>
+              <button
+                onClick={() => {
+                  setShowVirtualRaceModal(true);
+                  setVirtualRaceResults(null);
+                }}
+                className="px-3 md:px-4 py-1 md:py-2 bg-gradient-to-r from-purple-500 to-indigo-500 text-white rounded-full font-bold text-xs md:text-sm shadow-lg hover:shadow-2xl hover:scale-105 transition transform whitespace-nowrap flex items-center gap-1"
+              >
+                <DicePixelArt size={16} />
+                仮想レース
+              </button>
             </div>
           </div>
 
@@ -2798,6 +2957,195 @@ const HorseAnalysisApp = () => {
                   閉じる
                 </button>
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* 🎲 仮想レースモーダル */}
+        {showVirtualRaceModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+            <div className="bg-white rounded-3xl p-6 max-w-2xl w-full shadow-2xl max-h-[90vh] overflow-y-auto">
+              <h3 className="text-2xl font-bold mb-6 text-gray-800 flex items-center gap-2">
+                <DicePixelArt size={28} />
+                仮想レース着順シミュレーション
+              </h3>
+              
+              {!virtualRaceResults ? (
+                <>
+                  <div className="mb-6 p-4 bg-purple-50 rounded-2xl">
+                    <p className="text-sm text-gray-700 font-bold mb-2">
+                      このレースの期待勝率に基づいて、仮想レースを{simulationCount}回実行し、
+                      各馬が1着、2着、3着、4着以下になる回数を集計します。
+                    </p>
+                    <p className="text-xs text-gray-600 font-bold">
+                      ※ 4着以下は着外として一括扱いされます
+                    </p>
+                  </div>
+
+                  <div className="mb-6">
+                    <label className="block text-sm font-bold text-gray-700 mb-3">
+                      シミュレーション回数
+                    </label>
+                    <input
+                      type="number"
+                      value={simulationCount}
+                      onChange={(e) => setSimulationCount(Math.max(10, Math.min(10000, parseInt(e.target.value) || 100)))}
+                      className="w-full px-4 py-3 border-2 border-purple-300 rounded-2xl text-sm focus:outline-none focus:border-purple-500 font-bold"
+                      min="10"
+                      max="10000"
+                      step="10"
+                    />
+                    <p className="text-xs text-gray-600 mt-2 font-bold">
+                      推奨: 100回（より正確な結果には1000回以上）
+                    </p>
+                  </div>
+
+                  <div className="flex gap-4">
+                    <button
+                      onClick={runVirtualRaceSimulation}
+                      disabled={isSimulating}
+                      className="flex-1 px-6 py-3 bg-gradient-to-r from-purple-500 to-indigo-500 text-white rounded-full font-bold shadow-lg hover:shadow-2xl transition disabled:opacity-50 flex items-center justify-center gap-2"
+                    >
+                      {isSimulating ? (
+                        <>
+                          <span className="animate-spin">⏳</span>
+                          実行中...
+                        </>
+                      ) : (
+                        <>
+                          <DicePixelArt size={20} />
+                          シミュレーション開始
+                        </>
+                      )}
+                    </button>
+                    <button
+                      onClick={() => {
+                        setShowVirtualRaceModal(false);
+                        setVirtualRaceResults(null);
+                      }}
+                      className="px-6 py-3 bg-gray-400 text-white rounded-full font-bold hover:bg-gray-500 transition"
+                    >
+                      閉じる
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="mb-6 p-4 bg-gradient-to-r from-purple-50 to-indigo-50 rounded-2xl border-2 border-purple-300">
+                    <h4 className="font-bold text-gray-800 mb-2">
+                      {virtualRaceResults.raceName}
+                    </h4>
+                    <p className="text-sm text-gray-600 font-bold">
+                      シミュレーション回数: {virtualRaceResults.simulationCount}回
+                    </p>
+                  </div>
+
+                  <div className="space-y-3 mb-6">
+                    {virtualRaceResults.results.map(([horseName, counts], index) => {
+                      const first = counts['1着'];
+                      const second = counts['2着'];
+                      const third = counts['3着'];
+                      const fourth = counts['4着以下'];
+                      const total = virtualRaceResults.simulationCount;
+                      
+                      const firstPct = ((first / total) * 100).toFixed(1);
+                      const secondPct = ((second / total) * 100).toFixed(1);
+                      const thirdPct = ((third / total) * 100).toFixed(1);
+                      const fourthPct = ((fourth / total) * 100).toFixed(1);
+                      
+                      const topThreePct = (((first + second + third) / total) * 100).toFixed(1);
+                      
+                      const rankColors = [
+                        'from-yellow-100 to-yellow-200 border-yellow-400',
+                        'from-gray-100 to-gray-200 border-gray-400',
+                        'from-orange-100 to-orange-200 border-orange-400'
+                      ];
+                      const borderClass = index < 3 ? rankColors[index] : 'from-blue-50 to-blue-100 border-blue-300';
+
+                      return (
+                        <div key={index} className={`p-4 bg-gradient-to-r ${borderClass} rounded-2xl border-2`}>
+                          <div className="mb-3">
+                            <div className="flex items-center gap-2 mb-1">
+                              <span className="text-lg font-bold text-purple-600">
+                                {index + 1}位
+                              </span>
+                              <span className="font-bold text-gray-800">
+                                {horseName}
+                              </span>
+                            </div>
+                            <div className="text-xs text-gray-600 font-bold">
+                              期待勝率: {counts['期待勝率'].toFixed(2)}% / 
+                              複勝率: {topThreePct}%
+                            </div>
+                          </div>
+                          
+                          <div className="grid grid-cols-4 gap-2">
+                            <div className="text-center p-2 bg-white rounded-lg">
+                              <div className="text-xs text-gray-600 font-bold">1着</div>
+                              <div className="text-lg font-bold text-yellow-600">{first}回</div>
+                              <div className="text-xs text-gray-600 font-bold">{firstPct}%</div>
+                            </div>
+                            <div className="text-center p-2 bg-white rounded-lg">
+                              <div className="text-xs text-gray-600 font-bold">2着</div>
+                              <div className="text-lg font-bold text-gray-600">{second}回</div>
+                              <div className="text-xs text-gray-600 font-bold">{secondPct}%</div>
+                            </div>
+                            <div className="text-center p-2 bg-white rounded-lg">
+                              <div className="text-xs text-gray-600 font-bold">3着</div>
+                              <div className="text-lg font-bold text-orange-600">{third}回</div>
+                              <div className="text-xs text-gray-600 font-bold">{thirdPct}%</div>
+                            </div>
+                            <div className="text-center p-2 bg-white rounded-lg">
+                              <div className="text-xs text-gray-600 font-bold">着外</div>
+                              <div className="text-lg font-bold text-blue-600">{fourth}回</div>
+                              <div className="text-xs text-gray-600 font-bold">{fourthPct}%</div>
+                            </div>
+                          </div>
+                          
+                          {/* プログレスバー */}
+                          <div className="mt-3 h-2 bg-gray-200 rounded-full overflow-hidden">
+                            <div className="h-full flex">
+                              <div 
+                                className="bg-yellow-500" 
+                                style={{ width: `${firstPct}%` }}
+                              />
+                              <div 
+                                className="bg-gray-400" 
+                                style={{ width: `${secondPct}%` }}
+                              />
+                              <div 
+                                className="bg-orange-500" 
+                                style={{ width: `${thirdPct}%` }}
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  <div className="flex gap-4">
+                    <button
+                      onClick={() => {
+                        setVirtualRaceResults(null);
+                      }}
+                      className="flex-1 px-6 py-3 bg-gradient-to-r from-purple-500 to-indigo-500 text-white rounded-full font-bold shadow-lg hover:shadow-2xl transition flex items-center justify-center gap-2"
+                    >
+                      <DicePixelArt size={20} />
+                      再シミュレーション
+                    </button>
+                    <button
+                      onClick={() => {
+                        setShowVirtualRaceModal(false);
+                        setVirtualRaceResults(null);
+                      }}
+                      className="px-6 py-3 bg-gray-400 text-white rounded-full font-bold hover:bg-gray-500 transition"
+                    >
+                      閉じる
+                    </button>
+                  </div>
+                </>
+              )}
             </div>
           </div>
         )}
