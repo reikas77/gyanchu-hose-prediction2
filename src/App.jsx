@@ -353,16 +353,47 @@ const HorseAnalysisApp = () => {
       // 各馬の期待勝率を計算
       const horses = {};
       
-      // まずtotalScoreから指数変換で勝率を計算
-      const horsesWithScores = currentRace.horses.filter(h => h.totalScore && h.totalScore > 0);
+      // コース設定の重み（デフォルト値）
+      const weights = currentRace.course && courseSettings[currentRace.course]
+        ? courseSettings[currentRace.course]
+        : {
+            '能力値': 15,
+            'コース・距離適性': 18,
+            '展開利': 17,
+            '近走安定度': 10,
+            '馬場適性': 10,
+            '騎手': 5,
+            '斤量': 10,
+            '調教': 15
+          };
+      
+      // 各馬のtotalScoreを計算
+      const horsesWithScores = currentRace.horses.map(horse => {
+        let totalScore = 0;
+        
+        // scoresオブジェクトから計算
+        if (horse.scores) {
+          Object.keys(weights).forEach(factor => {
+            const factorKey = factor === '能力値' ? 'スピード能力値' : factor;
+            if (horse.scores[factorKey] !== undefined) {
+              totalScore += (horse.scores[factorKey] || 0) * (weights[factor] / 100);
+            }
+          });
+        }
+        
+        return {
+          ...horse,
+          totalScore
+        };
+      }).filter(h => h.totalScore && h.totalScore > 0);
       
       if (horsesWithScores.length === 0) {
-        alert('馬の評価スコア（totalScore）が計算されていません。');
+        alert('馬の評価スコア（scores）が計算されていません。レースデータを確認してください。');
         setIsSimulating(false);
         return;
       }
       
-      // 指数関数を使った勝率計算（元のコードと同じロジック）
+      // 指数関数を使った勝率計算
       const maxScore = Math.max(...horsesWithScores.map(h => h.totalScore));
       const exponentials = horsesWithScores.map(horse => ({
         ...horse,
