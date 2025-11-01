@@ -153,13 +153,29 @@ const HorseAnalysisApp = () => {
   // アプリのバージョン（更新時にこの数字を増やす）
   const APP_VERSION = '3.0.0'; // 仮想レース機能追加版
   
+  // バージョンチェックを無効化する場合はこれをtrueに
+  const DISABLE_VERSION_CHECK = true;
+  
   // 初回レンダリング時にバージョンチェック
   useEffect(() => {
+    if (DISABLE_VERSION_CHECK) {
+      // バージョンチェックが無効の場合はスキップ
+      return;
+    }
+    
     const savedVersion = localStorage.getItem('appVersion');
     if (savedVersion !== APP_VERSION) {
-      // バージョンが変わっていたら強制リロード
-      localStorage.setItem('appVersion', APP_VERSION);
-      window.location.reload(true);
+      // バージョンを保存してからリロード
+      try {
+        localStorage.setItem('appVersion', APP_VERSION);
+        // 保存が確実に完了するまで少し待つ
+        setTimeout(() => {
+          window.location.reload();
+        }, 100);
+      } catch (error) {
+        console.error('localStorage error:', error);
+        // localStorageが使えない場合はバージョンチェックをスキップ
+      }
       return;
     }
   }, []);
