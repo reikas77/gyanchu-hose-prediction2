@@ -352,17 +352,29 @@ const HorseAnalysisApp = () => {
     setTimeout(() => {
       // 各馬の期待勝率を計算
       const horses = {};
-      const totalScore = currentRace.horses.reduce((sum, h) => sum + (h.winRate || 0), 0);
       
-      if (totalScore === 0) {
-        alert('馬の勝率が計算されていません。');
+      // まずtotalScoreから指数変換で勝率を計算
+      const horsesWithScores = currentRace.horses.filter(h => h.totalScore && h.totalScore > 0);
+      
+      if (horsesWithScores.length === 0) {
+        alert('馬の評価スコア（totalScore）が計算されていません。');
         setIsSimulating(false);
         return;
       }
       
-      currentRace.horses.forEach(h => {
-        const horseKey = `${h.horseNum}番 ${h.name}`;
-        horses[horseKey] = h.winRate || 0;
+      // 指数関数を使った勝率計算（元のコードと同じロジック）
+      const maxScore = Math.max(...horsesWithScores.map(h => h.totalScore));
+      const exponentials = horsesWithScores.map(horse => ({
+        ...horse,
+        exp: Math.exp((horse.totalScore - maxScore) * (expCoefficient || 0.1))
+      }));
+      
+      const sumExp = exponentials.reduce((sum, h) => sum + h.exp, 0);
+      
+      exponentials.forEach(horse => {
+        const horseKey = `${horse.horseNum}番 ${horse.name}`;
+        const winRate = (horse.exp / sumExp) * 100;
+        horses[horseKey] = winRate;
       });
       
       // 集計カウンター初期化
