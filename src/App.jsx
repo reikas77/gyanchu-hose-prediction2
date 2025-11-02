@@ -1616,17 +1616,28 @@ const HorseAnalysisApp = () => {
                           </div>
                         </div>
                         {isAdmin && (
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setRaceToDelete(race.firebaseId);
-                              setShowDeleteConfirm(true);
-                            }}
-                            className="p-2 text-red-500 hover:bg-red-50 rounded-full opacity-0 group-hover:opacity-100 transition flex-shrink-0"
-                            title="削除"
-                          >
-                            🗑️
-                          </button>
+                          <div className="flex flex-col gap-1 opacity-0 group-hover:opacity-100 transition">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleRenameRace(race.firebaseId, race.name);
+                              }}
+                              className="px-2 py-1 bg-blue-400 text-white rounded-full text-xs font-bold hover:bg-blue-500 transition whitespace-nowrap"
+                            >
+                              ✏️ 名称変更
+                            </button>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setRaceToDelete(race.firebaseId);
+                                setShowDeleteConfirm(true);
+                              }}
+                              className="px-2 py-1 text-red-500 hover:bg-red-50 rounded-full text-xs font-bold flex-shrink-0"
+                              title="削除"
+                            >
+                              🗑️ 削除
+                            </button>
+                          </div>
                         )}
                       </div>
                       {race.odds && Object.keys(race.odds).length > 0 && (() => {
