@@ -1734,14 +1734,20 @@ const HorseAnalysisApp = () => {
                         <h3 className="font-bold text-lg text-gray-800">{name}</h3>
                         <div className="flex gap-2">
                           <button
-                            onClick={() => handleEditCourse(name)}
+                            onClick={(e) => {
+                              e.stopPropagation();  // ← 追加
+                              handleEditCourse(name);
+                            }}
                             className="p-2 text-blue-500 hover:bg-blue-50 rounded-full transition"
                             title="編集"
                           >
                             ✏️
                           </button>
                           <button
-                            onClick={() => deleteCourseSettings(name)}
+                            onClick={(e) => {
+                              e.stopPropagation();  // ← 追加
+                              deleteCourseSettings(name);
+                            }}
                             className="p-2 text-red-500 hover:bg-red-50 rounded-full transition"
                           >
                             🗑️
