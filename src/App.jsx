@@ -829,7 +829,7 @@ const HorseAnalysisApp = () => {
     }
   };
 
-  // 🔒 レースクリック時の処理（パスコードチェック追加）
+  // 🔒 レースクリック時の処理（パスコードチェック + 閲覧数カウント追加）
   const handleRaceClick = (race) => {
     if (race.passcode && !isAdmin) {
       // パスコードが設定されていて、管理者でない場合は認証モーダルを表示
@@ -845,6 +845,9 @@ const HorseAnalysisApp = () => {
       setOddsInput(race.odds || {});
       setExcludedHorses(race.excluded || {});
       setExpCoefficient(race.expCoefficient || 0.1);
+      
+      // 👁️ 閲覧数をカウント
+      incrementViewCount(race.firebaseId);
     }
   };
 
