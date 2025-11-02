@@ -1,48 +1,28 @@
-{/* オッズ入力モーダル */}
-        {showOddsModal && isAdmin && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-            <div className="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl max-h-[90vh] overflow-y-auto">
-              <h3 className="text-xl font-bold mb-6 text-gray-800 flex items-center gap-2">
-                <StarPixelArt size={24} />
-                オッズを入力
-              </h3>import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { initializeApp } from 'firebase/app';
 import { getDatabase, ref, set, remove, onValue, push } from 'firebase/database';
 import { getAuth, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
 
-// ═══════════════════════════════════════════
-// 🎨 ドット絵コンポーネント
-// ═══════════════════════════════════════════
-
+// ドット絵コンポーネント
 const HorsePixelArt = ({ size = 24 }) => (
   <svg width={size} height={size} viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-    {/* 頭 */}
     <rect x="2" y="6" width="2" height="2" fill="#8B4513" />
     <rect x="4" y="6" width="2" height="2" fill="#8B4513" />
-    {/* 耳 */}
     <rect x="6" y="4" width="2" height="2" fill="#A0522D" />
     <rect x="8" y="4" width="2" height="2" fill="#A0522D" />
-    {/* 体 */}
     <rect x="3" y="8" width="10" height="4" fill="#D2691E" />
-    {/* 脚 */}
     <rect x="4" y="12" width="2" height="3" fill="#8B4513" />
     <rect x="10" y="12" width="2" height="3" fill="#8B4513" />
-    {/* 目 */}
     <circle cx="5" cy="6" r="1" fill="#FFD700" />
   </svg>
 );
 
 const CrownPixelArt = ({ size = 24 }) => (
   <svg width={size} height={size} viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-    {/* ベース */}
     <rect x="2" y="10" width="12" height="2" fill="#FFD700" />
-    {/* スパイク左 */}
     <rect x="3" y="6" width="2" height="4" fill="#FFD700" />
-    {/* スパイク中央 */}
     <rect x="7" y="4" width="2" height="6" fill="#FFD700" />
-    {/* スパイク右 */}
     <rect x="11" y="6" width="2" height="4" fill="#FFD700" />
-    {/* 宝石 */}
     <circle cx="4" cy="5" r="1" fill="#FF69B4" />
     <circle cx="8" cy="3" r="1" fill="#FF69B4" />
     <circle cx="12" cy="5" r="1" fill="#FF69B4" />
@@ -51,13 +31,9 @@ const CrownPixelArt = ({ size = 24 }) => (
 
 const MedalPixelArt = ({ size = 24 }) => (
   <svg width={size} height={size} viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-    {/* 金メダル */}
     <circle cx="4" cy="6" r="3" fill="#FFD700" />
-    {/* 銀メダル */}
     <circle cx="12" cy="6" r="3" fill="#C0C0C0" />
-    {/* 銅メダル */}
     <circle cx="8" cy="4" r="3" fill="#CD7F32" />
-    {/* リボン */}
     <rect x="3" y="9" width="2" height="4" fill="#FF69B4" />
     <rect x="11" y="9" width="2" height="4" fill="#FF69B4" />
     <rect x="7" y="9" width="2" height="5" fill="#FF69B4" />
@@ -80,11 +56,8 @@ const StarPixelArt = ({ size = 24 }) => (
 
 const LockPixelArt = ({ size = 24 }) => (
   <svg width={size} height={size} viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-    {/* 錠前本体 */}
     <rect x="3" y="8" width="10" height="6" fill="#8B4513" />
-    {/* 錠前カギ部 */}
     <rect x="5" y="4" width="6" height="4" fill="#A0522D" stroke="#8B4513" strokeWidth="1" />
-    {/* 鍵穴 */}
     <circle cx="8" cy="11" r="1" fill="#FFD700" />
     <rect x="7" y="6" width="2" height="2" fill="#FFD700" />
   </svg>
@@ -92,7 +65,6 @@ const LockPixelArt = ({ size = 24 }) => (
 
 const HeartPixelArt = ({ size = 24 }) => (
   <svg width={size} height={size} viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-    {/* ハート */}
     <circle cx="5" cy="4" r="2" fill="#FF1493" />
     <circle cx="11" cy="4" r="2" fill="#FF1493" />
     <rect x="3" y="6" width="10" height="8" fill="#FF1493" />
@@ -103,7 +75,6 @@ const HeartPixelArt = ({ size = 24 }) => (
 
 const BarPixelArt = ({ size = 24 }) => (
   <svg width={size} height={size} viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-    {/* グラフ棒 */}
     <rect x="2" y="12" width="2" height="2" fill="#FF69B4" />
     <rect x="5" y="8" width="2" height="6" fill="#FF69B4" />
     <rect x="8" y="5" width="2" height="9" fill="#FF69B4" />
@@ -113,25 +84,17 @@ const BarPixelArt = ({ size = 24 }) => (
 
 const TrophyPixelArt = ({ size = 24 }) => (
   <svg width={size} height={size} viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-    {/* 持ち手左 */}
     <rect x="2" y="4" width="2" height="6" fill="#FFD700" />
-    {/* トロフィー本体 */}
     <rect x="6" y="2" width="4" height="8" fill="#FFD700" />
-    {/* 持ち手右 */}
     <rect x="12" y="4" width="2" height="6" fill="#FFD700" />
-    {/* ベース */}
     <rect x="5" y="10" width="6" height="2" fill="#FFD700" />
-    {/* 台 */}
     <rect x="4" y="12" width="8" height="2" fill="#CD7F32" />
   </svg>
 );
 
-// 🎲 サイコロのアイコン
 const DicePixelArt = ({ size = 24 }) => (
   <svg width={size} height={size} viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-    {/* サイコロ本体 */}
     <rect x="2" y="2" width="12" height="12" fill="#FFFFFF" stroke="#000000" strokeWidth="1" rx="2" />
-    {/* サイコロの点 */}
     <circle cx="5" cy="5" r="1" fill="#000000" />
     <circle cx="8" cy="8" r="1" fill="#000000" />
     <circle cx="11" cy="11" r="1" fill="#000000" />
@@ -140,7 +103,6 @@ const DicePixelArt = ({ size = 24 }) => (
   </svg>
 );
 
-// 👁️ 目のアイコン（閲覧数表示用）
 const EyePixelArt = ({ size = 24 }) => (
   <svg width={size} height={size} viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
     <ellipse cx="8" cy="8" rx="6" ry="4" fill="#4A90E2" />
@@ -160,10 +122,11 @@ const firebaseConfig = {
   measurementId: "G-75KP9PB5YT"
 };
 
-// Firebase初期化
 const app = initializeApp(firebaseConfig);
 const database = getDatabase(app);
 const auth = getAuth(app);
+
+const HorseAnalysisApp = () => {
 const HorseAnalysisApp = () => {
   // アプリのバージョン
   const APP_VERSION = '3.2.0'; // バグ修正版
@@ -299,7 +262,7 @@ const HorseAnalysisApp = () => {
     { name: '斤量', weight: 10, key: '斤量' },
     { name: '調教', weight: 15, key: '調教' }
   ];
-// 🎲 仮想レースシミュレーター関数群（改善版）
+  // 🎲 仮想レースシミュレーター関数群（改善版）
   
   // 勝率を再配分(合計100%に正規化)
   const redistributeRates = (remaining) => {
@@ -528,7 +491,7 @@ const HorseAnalysisApp = () => {
       }
     });
   }, []);
-const addManualHorse = () => {
+  const addManualHorse = () => {
     const newHorse = {
       horseNum: manualHorses.length + 1,
       name: '',
@@ -946,7 +909,7 @@ const addManualHorse = () => {
       </div>
     );
   };
-const calculateWinRate = (horses, courseKey = null) => {
+  const calculateWinRate = (horses, courseKey = null) => {
     if (!horses || horses.length === 0) return [];
 
     const weights = courseKey && courseSettings[courseKey]
@@ -1279,7 +1242,7 @@ const calculateWinRate = (horses, courseKey = null) => {
       fukusho: { hits: fukushoHits, rate: ((fukushoHits / recordedRaces.length) * 100).toFixed(1) }
     };
   };
-// ✨ ファクター毎の的中率分析関数
+  // ✨ ファクター毎の的中率分析関数
   const calculateFactorStats = (courseKey = null) => {
     let recordedRaces = races.filter(r => r.result && r.odds && Object.keys(r.odds).length > 0);
     
@@ -1461,7 +1424,7 @@ const calculateWinRate = (horses, courseKey = null) => {
       </div>
     );
   }
-if (!currentRace) {
+  if (!currentRace) {
     const availableCourses = getAvailableCourses();
 
     return (
@@ -1691,7 +1654,12 @@ if (!currentRace) {
               )}
             </div>
           )}
-{activeTab === 'settings' && isAdmin && (
+}
+        </div>
+      </div>
+    );
+  }
+          {activeTab === 'settings' && isAdmin && (
             <div className="bg-white rounded-3xl p-4 md:p-8 shadow-lg border-2 border-purple-200">
               <button
                 onClick={() => setShowSettingsModal(true)}
@@ -1947,7 +1915,7 @@ if (!currentRace) {
               </div>
             </div>
           )}
-{/* レースデータアップロードモーダル */}
+          {/* レースデータアップロードモーダル */}
           {showUploadModal && (
             <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
               <div className="bg-white rounded-3xl p-6 md:p-8 max-w-4xl w-full shadow-2xl max-h-[90vh] overflow-y-auto">
@@ -2176,7 +2144,7 @@ if (!currentRace) {
               </div>
             </div>
           )}
-{/* 🔒 パスコード認証モーダル */}
+          {/* 🔒 パスコード認証モーダル */}
           {showPasscodeModal && (
             <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
               <div className="bg-white rounded-3xl p-6 md:p-8 max-w-md w-full shadow-2xl">
@@ -2533,7 +2501,7 @@ if (!currentRace) {
       </div>
     );
   }
-// レース詳細画面
+  // レース詳細画面
   const resultsWithRate = calculateWinRate(currentRace.horses, raceSelectedCourse);
   const expectationRanking = calculateExpectationRanking(resultsWithRate, oddsInput);
   const aiRecommendation = calculateAIRecommendation(resultsWithRate);
@@ -2756,7 +2724,7 @@ if (!currentRace) {
                 </React.Fragment>
               );
             })}
-{Object.keys(excludedHorses).length > 0 && (
+            {Object.keys(excludedHorses).length > 0 && (
               <div className="mt-4 md:mt-6 pt-3 md:pt-4 border-t-2 border-gray-300">
                 <p className="text-xs md:text-sm text-gray-600 mb-2 md:mb-3 font-bold">🚫 除外対象：</p>
                 <div className="space-y-2">
@@ -3106,7 +3074,7 @@ if (!currentRace) {
             </div>
           </div>
         )}
-{/* オッズ入力モーダル */}
+        {/* オッズ入力モーダル */}
         {showOddsModal && isAdmin && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
             <div className="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl max-h-[90vh] overflow-y-auto">
@@ -3114,410 +3082,6 @@ if (!currentRace) {
                 <StarPixelArt size={24} />
                 オッズを入力
               </h3>
-              
-              <div className="space-y-3 mb-6">
-                {currentRace.horses.sort((a, b) => a.horseNum - b.horseNum).map((horse) => (
-                  <div key={horse.horseNum} className="flex items-center gap-3">
-                    <label className="text-xs font-bold text-gray-700 w-32 truncate">{horse.horseNum}. {horse.name}</label>
-                    <input
-                      type="number"
-                      step="0.1"
-                      value={oddsInput[horse.horseNum] || ''}
-                      onChange={(e) => setOddsInput({...oddsInput, [horse.horseNum]: parseFloat(e.target.value) || 0})}
-                      className="flex-1 px-3 py-2 border-2 border-orange-300 rounded-lg text-xs focus:outline-none focus:border-orange-500"
-                      placeholder="オッズ"
-                    />
-                  </div>
-                ))}
-              </div>
-
-              <div className="flex gap-4">
-                <button
-                  onClick={() => {
-                    updateRaceOdds(oddsInput);
-                    setShowOddsModal(false);
-                  }}
-                  className="flex-1 px-4 py-3 bg-gradient-to-r from-orange-400 to-orange-500 text-white rounded-full font-bold shadow-lg hover:shadow-2xl transition"
-                >
-                  保存
-                </button>
-                <button
-                  onClick={() => setShowOddsModal(false)}
-                  className="flex-1 px-4 py-3 bg-gray-400 text-white rounded-full font-bold hover:bg-gray-500 transition"
-                >
-                  キャンセル
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* 結果記録モーダル */}
-        {showResultModal && isAdmin && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-            <div className="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl">
-              <h3 className="text-2xl font-bold mb-6 text-gray-800 flex items-center gap-2">
-                <MedalPixelArt size={28} />
-                着順を記録
-              </h3>
-              
-              <div className="mb-6">
-                <label className="text-sm font-bold text-gray-700 mb-3 block">着順を馬番で入力</label>
-                <p className="text-xs text-gray-600 mb-4 font-bold">例：8-15-5</p>
-                <input
-                  type="text"
-                  value={resultRanking}
-                  onChange={(e) => setResultRanking(e.target.value)}
-                  className="w-full px-4 py-3 border-2 border-green-300 rounded-2xl text-sm focus:outline-none focus:border-green-500 font-bold"
-                  placeholder="8-15-5"
-                  autoFocus
-                />
-              </div>
-
-              <div className="flex gap-4">
-                <button
-                  onClick={handleSaveResult}
-                  className="flex-1 px-4 py-3 bg-gradient-to-r from-green-400 to-green-500 text-white rounded-full font-bold shadow-lg hover:shadow-2xl transition"
-                >
-                  保存
-                </button>
-                <button
-                  onClick={() => {
-                    setShowResultModal(false);
-                    setResultRanking('');
-                  }}
-                  className="flex-1 px-4 py-3 bg-gray-300 text-gray-800 rounded-full font-bold hover:bg-gray-400 transition"
-                >
-                  キャンセル
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* 買い目生成モーダル */}
-        {showBettingModal && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-            <div className="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl max-h-[90vh] overflow-y-auto">
-              <h3 className="text-xl md:text-2xl font-bold mb-4 md:mb-6 text-gray-800 flex items-center gap-2">
-                <TrophyPixelArt size={24} />
-                買い目自動生成
-              </h3>
-              
-              <div className="mb-4 md:mb-6">
-                <label className="block text-sm font-bold text-gray-700 mb-3">予算を入力（100円単位）</label>
-                <input
-                  type="number"
-                  step="100"
-                  min="100"
-                  value={bettingBudget}
-                  onChange={(e) => {
-                    const value = parseInt(e.target.value) || 0;
-                    setBettingBudget(Math.round(value / 100) * 100);
-                  }}
-                  className="w-full px-4 py-3 border-2 border-cyan-300 rounded-2xl text-sm focus:outline-none focus:border-cyan-500 font-bold"
-                  placeholder="1000"
-                />
-              </div>
-
-              <div className="mb-4 md:mb-6">
-                <label className="block text-sm font-bold text-gray-700 mb-3">購入タイプ</label>
-                <div className="space-y-3">
-                  <button
-                    onClick={() => setBettingType('accuracy')}
-                    className={`w-full px-4 py-3 rounded-2xl text-left font-bold transition text-sm ${
-                      bettingType === 'accuracy'
-                        ? 'bg-gradient-to-r from-pink-400 to-pink-500 text-white'
-                        : 'bg-gray-100 text-gray-800 hover:bg-gray-200'
-                    }`}
-                  >
-                    <div className="flex items-center gap-2">
-                      <MedalPixelArt size={18} />
-                      <div>
-                        <div>🎯 的中率特化型</div>
-                        <p className="text-xs mt-1 opacity-80">勝率1位馬から買い目を生成</p>
-                      </div>
-                    </div>
-                  </button>
-                  <button
-                    onClick={() => setBettingType('value')}
-                    className={`w-full px-4 py-3 rounded-2xl text-left font-bold transition text-sm ${
-                      bettingType === 'value'
-                        ? 'bg-gradient-to-r from-yellow-400 to-yellow-500 text-white'
-                        : 'bg-gray-100 text-gray-800 hover:bg-gray-200'
-                    }`}
-                  >
-                    <div className="flex items-center gap-2">
-                      <StarPixelArt size={18} />
-                      <div>
-                        <div>💎 回収率特化型</div>
-                        <p className="text-xs mt-1 opacity-80">期待値馬から買い目を生成</p>
-                      </div>
-                    </div>
-                  </button>
-                </div>
-              </div>
-
-              {generatedBets.length === 0 ? (
-                <button
-                  onClick={generateBettingRecommendations}
-                  className="w-full px-6 py-3 bg-gradient-to-r from-cyan-400 to-cyan-500 text-white rounded-full font-bold shadow-lg hover:shadow-2xl transition mb-4 flex items-center justify-center gap-2"
-                >
-                  <TrophyPixelArt size={20} />
-                  買い目を生成
-                </button>
-              ) : (
-                <div className="mb-6">
-                  <h4 className="text-base md:text-lg font-bold text-gray-700 mb-3 flex items-center gap-2">
-                    <StarPixelArt size={18} />
-                    推奨買い目
-                  </h4>
-                  <div className="space-y-3">
-                    {generatedBets.map((bet, idx) => (
-                      <div key={idx} className="p-3 md:p-4 bg-gradient-to-r from-cyan-50 to-blue-50 rounded-2xl border-2 border-cyan-300">
-                        <div className="flex justify-between items-start mb-2">
-                          <span className="font-bold text-cyan-700 text-sm">{bet.type}</span>
-                          {bet.amount > 0 && (
-                            <span className="font-bold text-gray-700 text-sm">{bet.amount}円</span>
-                          )}
-                        </div>
-                        {bet.horses.length > 0 && (
-                          <div className="text-xs md:text-sm text-gray-700 font-bold mb-1">
-                            {bet.horses.join(' ')}
-                          </div>
-                        )}
-                        <div className="text-xs text-gray-600 font-bold">
-                          {bet.reason}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                  <div className="mt-4 p-3 bg-cyan-100 rounded-2xl text-sm text-cyan-800 font-bold flex items-center gap-2">
-                    <TrophyPixelArt size={18} />
-                    合計: {generatedBets.reduce((sum, bet) => sum + bet.amount, 0)}円
-                  </div>
-                </div>
-              )}
-
-              <div className="flex gap-4">
-                {generatedBets.length > 0 && (
-                  <button
-                    onClick={() => {
-                      setGeneratedBets([]);
-                    }}
-                    className="flex-1 px-4 py-3 bg-gray-300 text-gray-800 rounded-full font-bold hover:bg-gray-400 transition"
-                  >
-                    再生成
-                  </button>
-                )}
-                <button
-                  onClick={() => {
-                    setShowBettingModal(false);
-                    setGeneratedBets([]);
-                  }}
-                  className="flex-1 px-4 py-3 bg-gray-400 text-white rounded-full font-bold hover:bg-gray-500 transition"
-                >
-                  閉じる
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* 🎲 仮想レースモーダル */}
-        {showVirtualRaceModal && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-            <div className="bg-white rounded-3xl p-6 max-w-2xl w-full shadow-2xl max-h-[90vh] overflow-y-auto">
-              <h3 className="text-xl md:text-2xl font-bold mb-4 md:mb-6 text-gray-800 flex items-center gap-2">
-                <DicePixelArt size={24} />
-                仮想レース着順シミュレーション
-              </h3>
-              
-              {!virtualRaceResults ? (
-                <>
-                  <div className="mb-6 p-4 bg-purple-50 rounded-2xl">
-                    <p className="text-sm text-gray-700 font-bold mb-2">
-                      このレースの期待勝率に基づいて、仮想レースを{simulationCount}回実行し、
-                      各馬が1着、2着、3着、4着以下になる回数を集計します。
-                    </p>
-                    <p className="text-xs text-gray-600 font-bold">
-                      ※ 4着以下は着外として一括扱いされます
-                    </p>
-                  </div>
-
-                  <div className="mb-6">
-                    <label className="block text-sm font-bold text-gray-700 mb-3">
-                      シミュレーション回数
-                    </label>
-                    <input
-                      type="number"
-                      value={simulationCount}
-                      onChange={(e) => setSimulationCount(Math.max(10, Math.min(10000, parseInt(e.target.value) || 1000)))}
-                      className="w-full px-4 py-3 border-2 border-purple-300 rounded-2xl text-sm focus:outline-none focus:border-purple-500 font-bold"
-                      min="10"
-                      max="10000"
-                      step="100"
-                    />
-                    <p className="text-xs text-gray-600 mt-2 font-bold">
-                      推奨: 1000回以上（精度が向上します）
-                    </p>
-                  </div>
-
-                  <div className="flex gap-4">
-                    <button
-                      onClick={runVirtualRaceSimulation}
-                      disabled={isSimulating}
-                      className="flex-1 px-6 py-3 bg-gradient-to-r from-purple-500 to-indigo-500 text-white rounded-full font-bold shadow-lg hover:shadow-2xl transition disabled:opacity-50 flex items-center justify-center gap-2"
-                    >
-                      {isSimulating ? (
-                        <>
-                          <span className="animate-spin">⏳</span>
-                          実行中...
-                        </>
-                      ) : (
-                        <>
-                          <DicePixelArt size={20} />
-                          シミュレーション開始
-                        </>
-                      )}
-                    </button>
-                    <button
-                      onClick={() => {
-                        setShowVirtualRaceModal(false);
-                        setVirtualRaceResults(null);
-                      }}
-                      className="px-6 py-3 bg-gray-400 text-white rounded-full font-bold hover:bg-gray-500 transition"
-                    >
-                      閉じる
-                    </button>
-                  </div>
-                </>
-              ) : (
-                <>
-                  <div className="mb-6 p-4 bg-gradient-to-r from-purple-50 to-indigo-50 rounded-2xl border-2 border-purple-300">
-                    <h4 className="font-bold text-gray-800 mb-2">
-                      {virtualRaceResults.raceName}
-                    </h4>
-                    <p className="text-sm text-gray-600 font-bold">
-                      シミュレーション回数: {virtualRaceResults.simulationCount}回
-                    </p>
-                  </div>
-
-                  <div className="space-y-3 mb-6">
-                    {virtualRaceResults.results.map(([horseName, counts], index) => {
-                      const first = counts['1着'];
-                      const second = counts['2着'];
-                      const third = counts['3着'];
-                      const fourth = counts['4着以下'];
-                      const total = virtualRaceResults.simulationCount;
-                      
-                      const firstPct = ((first / total) * 100).toFixed(1);
-                      const secondPct = ((second / total) * 100).toFixed(1);
-                      const thirdPct = ((third / total) * 100).toFixed(1);
-                      const fourthPct = ((fourth / total) * 100).toFixed(1);
-                      
-                      const topThreePct = (((first + second + third) / total) * 100).toFixed(1);
-                      
-                      const rankColors = [
-                        'from-yellow-100 to-yellow-200 border-yellow-400',
-                        'from-gray-100 to-gray-200 border-gray-400',
-                        'from-orange-100 to-orange-200 border-orange-400'
-                      ];
-                      const borderClass = index < 3 ? rankColors[index] : 'from-blue-50 to-blue-100 border-blue-300';
-
-                      return (
-                        <div key={index} className={`p-3 md:p-4 bg-gradient-to-r ${borderClass} rounded-2xl border-2`}>
-                          <div className="mb-3">
-                            <div className="flex items-center gap-2 mb-1">
-                              <span className="text-base md:text-lg font-bold text-purple-600">
-                                {index + 1}位
-                              </span>
-                              <span className="font-bold text-gray-800 text-sm md:text-base truncate">
-                                {horseName}
-                              </span>
-                            </div>
-                            <div className="text-xs text-gray-600 font-bold">
-                              期待勝率: {counts['期待勝率'].toFixed(2)}% / 
-                              複勝率: {topThreePct}%
-                            </div>
-                          </div>
-                          
-                          <div className="grid grid-cols-4 gap-2">
-                            <div className="text-center p-2 bg-white rounded-lg">
-                              <div className="text-xs text-gray-600 font-bold">1着</div>
-                              <div className="text-base md:text-lg font-bold text-yellow-600">{first}回</div>
-                              <div className="text-xs text-gray-600 font-bold">{firstPct}%</div>
-                            </div>
-                            <div className="text-center p-2 bg-white rounded-lg">
-                              <div className="text-xs text-gray-600 font-bold">2着</div>
-                              <div className="text-base md:text-lg font-bold text-gray-600">{second}回</div>
-                              <div className="text-xs text-gray-600 font-bold">{secondPct}%</div>
-                            </div>
-                            <div className="text-center p-2 bg-white rounded-lg">
-                              <div className="text-xs text-gray-600 font-bold">3着</div>
-                              <div className="text-base md:text-lg font-bold text-orange-600">{third}回</div>
-                              <div className="text-xs text-gray-600 font-bold">{thirdPct}%</div>
-                            </div>
-                            <div className="text-center p-2 bg-white rounded-lg">
-                              <div className="text-xs text-gray-600 font-bold">着外</div>
-                              <div className="text-base md:text-lg font-bold text-blue-600">{fourth}回</div>
-                              <div className="text-xs text-gray-600 font-bold">{fourthPct}%</div>
-                            </div>
-                          </div>
-                          
-                          {/* プログレスバー */}
-                          <div className="mt-3 h-2 bg-gray-200 rounded-full overflow-hidden">
-                            <div className="h-full flex">
-                              <div 
-                                className="bg-yellow-500" 
-                                style={{ width: `${firstPct}%` }}
-                              />
-                              <div 
-                                className="bg-gray-400" 
-                                style={{ width: `${secondPct}%` }}
-                              />
-                              <div 
-                                className="bg-orange-500" 
-                                style={{ width: `${thirdPct}%` }}
-                              />
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-
-                  <div className="flex gap-4">
-                    <button
-                      onClick={() => {
-                        setVirtualRaceResults(null);
-                      }}
-                      className="flex-1 px-6 py-3 bg-gradient-to-r from-purple-500 to-indigo-500 text-white rounded-full font-bold shadow-lg hover:shadow-2xl transition flex items-center justify-center gap-2"
-                    >
-                      <DicePixelArt size={20} />
-                      再シミュレーション
-                    </button>
-                    <button
-                      onClick={() => {
-                        setShowVirtualRaceModal(false);
-                        setVirtualRaceResults(null);
-                      }}
-                      className="px-6 py-3 bg-gray-400 text-white rounded-full font-bold hover:bg-gray-500 transition"
-                    >
-                      閉じる
-                    </button>
-                  </div>
-                </>
-              )}
-            </div>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-};
-
-export default HorseAnalysisApp;
               
               <div className="space-y-3 mb-6">
                 {currentRace.horses.sort((a, b) => a.horseNum - b.horseNum).map((horse) => (
