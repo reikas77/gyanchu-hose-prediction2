@@ -829,6 +829,16 @@ const HorseAnalysisApp = () => {
     }
   };
 
+  // 👁️ 閲覧数をカウント（管理者以外のみ）
+  const incrementViewCount = (raceId) => {
+    if (!isAdmin && raceId) {
+      const race = races.find(r => r.firebaseId === raceId);
+      const currentCount = race?.viewCount || 0;
+      const raceRef = ref(database, `races/${raceId}/viewCount`);
+      set(raceRef, currentCount + 1);
+    }
+  };
+
   // 🔒 レースクリック時の処理（パスコードチェック + 閲覧数カウント追加）
   const handleRaceClick = (race) => {
     if (race.passcode && !isAdmin) {
