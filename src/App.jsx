@@ -1581,9 +1581,30 @@ const HorseAnalysisApp = () => {
                     : races.filter(r => r.result)
                   ).map((race) => (
                     <div
-                      key={race.firebaseId}
-                      onClick={() => handleRaceClick(race)}
-                      className="bg-gradient-to-br from-pink-50 to-purple-50 rounded-2xl md:rounded-3xl p-4 md:p-6 border-2 border-pink-200 hover:border-purple-400 cursor-pointer hover:shadow-lg transition shadow-md hover:scale-105 group"
+                      {isAdmin && (
+                          <div className="flex flex-col gap-1 opacity-0 group-hover:opacity-100 transition">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();  // ← これが重要！
+                                handleRenameRace(race.firebaseId, race.name);
+                              }}
+                              className="px-2 py-1 bg-blue-400 text-white rounded-full text-xs font-bold hover:bg-blue-500 transition whitespace-nowrap"
+                            >
+                              ✏️ 名称変更
+                            </button>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();  // ← これが重要！
+                                setRaceToDelete(race.firebaseId);
+                                setShowDeleteConfirm(true);
+                              }}
+                              className="px-2 py-1 text-red-500 hover:bg-red-50 rounded-full text-xs font-bold flex-shrink-0"
+                              title="削除"
+                            >
+                              🗑️ 削除
+                            </button>
+                          </div>
+                        )}
                     >
                       <div className="flex items-start justify-between mb-3">
                         <div className="flex-1 min-w-0 flex items-start gap-2">
