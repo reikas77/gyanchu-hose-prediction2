@@ -1952,6 +1952,35 @@ const HorseAnalysisApp = () => {
                 </div>
 
                 <div className="mb-6">
+                <label className="block text-sm font-bold text-gray-700 mb-2">⭐ 自信度</label>
+                <div className="flex gap-2">
+                  {[1, 2, 3, 4, 5].map((star) => (
+                    <button
+                      key={star}
+                      onClick={() => setRaceConfidence(star)}
+                      className={`flex-1 py-2 rounded-xl font-bold transition ${
+                        raceConfidence === star
+                          ? 'bg-yellow-400 text-white shadow-lg'
+                          : 'bg-gray-200 text-gray-600 hover:bg-gray-300'
+                      }`}
+                    >
+                      {'★'.repeat(star)}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="mb-6">
+                <label className="block text-sm font-bold text-gray-700 mb-2">🕐 発走時間</label>
+                <input
+                  type="datetime-local"
+                  value={raceStartTime}
+                  onChange={(e) => setRaceStartTime(e.target.value)}
+                  className="w-full px-4 py-3 border-2 border-pink-300 rounded-2xl focus:outline-none focus:border-pink-500"
+                />
+              </div>
+                
+                <div className="mb-6">
                   <label className="block text-sm font-bold text-gray-700 mb-2 flex items-center gap-2">
                     <LockPixelArt size={20} />
                     パスコード（オプション）
