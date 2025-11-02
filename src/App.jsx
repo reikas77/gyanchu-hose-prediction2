@@ -362,7 +362,7 @@ const HorseAnalysisApp = () => {
   // 仮想レースシミュレーション実行（改善版）
   const runVirtualRaceSimulation = () => {
     if (!currentRace || !currentRace.horses || currentRace.horses.length < 3) {
-      alert('レースデータが不足しています。最低3頭の馬が必要です。');
+      window.alert('レースデータが不足しています。最低3頭の馬が必要です。');
       return;
     }
     
@@ -407,7 +407,7 @@ const HorseAnalysisApp = () => {
       }).filter(h => h.totalScore && h.totalScore > 0);
       
       if (horsesWithScores.length === 0) {
-        alert('馬の評価スコア（scores）が計算されていません。');
+        window.alert('馬の評価スコア（scores）が計算されていません。');
         setIsSimulating(false);
         return;
       }
@@ -484,10 +484,10 @@ const HorseAnalysisApp = () => {
         onValue(versionRef, snapshot => {
           const serverVersion = snapshot.val();
           if (serverVersion && serverVersion !== APP_VERSION) {
-            alert('⚠️ アプリが古いバージョンです\n\n最新版を使用するため、ページを更新してください。\n\n更新方法：\n・Ctrl+Shift+R (Windows)\n・Cmd+Shift+R (Mac)');
+            window.alert('⚠️ アプリが古いバージョンです\n\n最新版を使用するため、ページを更新してください。\n\n更新方法：\n・Ctrl+Shift+R (Windows)\n・Cmd+Shift+R (Mac)');
             
             const interval = setInterval(() => {
-              alert('⚠️ このバージョンは使用できません\n\nページを更新してください');
+              window.alert('⚠️ このバージョンは使用できません\n\nページを更新してください');
             }, 10000);
             
             setIsLoading(false);
@@ -717,13 +717,13 @@ const HorseAnalysisApp = () => {
 
   const saveCourseSettings = () => {
     if (!courseName.trim()) {
-      alert('コース名を入力してください');
+      window.alert('コース名を入力してください');
       return;
     }
 
     const total = Object.values(tempFactors).reduce((a, b) => a + b, 0);
     if (total !== 100) {
-      alert(`比重の合計が100%ではありません（現在${total}%）`);
+      window.alert(`比重の合計が100%ではありません（現在${total}%）`);
       return;
     }
 
@@ -750,7 +750,7 @@ const HorseAnalysisApp = () => {
   };
 
   const deleteCourseSettings = (name) => {
-    if (!confirm(`「${name}」を削除してもよろしいですか？`)) {
+    if (!window.confirm(`「${name}」を削除してもよろしいですか？`)) {
       return;
     }
     const newSettings = { ...courseSettings };
@@ -877,7 +877,7 @@ const HorseAnalysisApp = () => {
         })
         .catch((error) => {
           console.error('レース名の更新に失敗:', error);
-          alert('レース名の更新に失敗しました');
+          window.alert('レース名の更新に失敗しました');
         });
     }
   };
@@ -897,7 +897,7 @@ const HorseAnalysisApp = () => {
     if (editingCourseKey && courseName.trim()) {
       const total = Object.values(tempFactors).reduce((a, b) => a + b, 0);
       if (total !== 100) {
-        alert(`比重の合計が100%ではありません（現在${total}%）`);
+        window.alert(`比重の合計が100%ではありません（現在${total}%）`);
         return;
       }
       
@@ -910,7 +910,7 @@ const HorseAnalysisApp = () => {
         })
         .catch((error) => {
           console.error('コース設定の更新に失敗:', error);
-          alert('コース設定の更新に失敗しました');
+          window.alert('コース設定の更新に失敗しました');
         });
     }
   };
@@ -1368,7 +1368,7 @@ const HorseAnalysisApp = () => {
 
   const handleSaveResult = () => {
     if (!resultRanking.trim()) {
-      alert('着順を入力してください');
+      window.alert('着順を入力してください');
       return;
     }
 
@@ -1376,7 +1376,7 @@ const HorseAnalysisApp = () => {
     const top1 = resultsWithRate[0];
 
     if (!top1) {
-      alert('評価対象の馬がありません');
+      window.alert('評価対象の馬がありません');
       return;
     }
 
@@ -2346,9 +2346,9 @@ const HorseAnalysisApp = () => {
                         onClick={() => {
                           const versionRef = ref(database, 'appVersion');
                           set(versionRef, APP_VERSION).then(() => {
-                            alert(`✅ Firebaseのバージョンを ${APP_VERSION} に更新しました！\n\n古いバージョンを開いている全ユーザーに更新通知が送られます。`);
+                            window.alert(`✅ Firebaseのバージョンを ${APP_VERSION} に更新しました！\n\n古いバージョンを開いている全ユーザーに更新通知が送られます。`);
                           }).catch((error) => {
-                            alert('❌ 更新に失敗しました: ' + error.message);
+                            window.alert('❌ 更新に失敗しました: ' + error.message);
                           });
                         }}
                         className="w-full px-4 py-2 bg-gradient-to-r from-blue-400 to-blue-500 text-white rounded-full font-bold text-sm shadow-lg hover:shadow-2xl hover:scale-105 transition"
@@ -2381,7 +2381,7 @@ const HorseAnalysisApp = () => {
                         setAdminPassword('');
                         setShowAdminModal(false);
                       } else {
-                        alert('パスコードが違います');
+                        window.alert('パスコードが違います');
                         setAdminPassword('');
                       }
                     }}
