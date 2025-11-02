@@ -1580,7 +1580,6 @@ const HorseAnalysisApp = () => {
                     ? races.filter(r => !r.result)
                     : races.filter(r => r.result)
                   ).map((race) => (
-                    
                       <div
                       key={race.firebaseId}
                       onClick={() => handleRaceClick(race)}
