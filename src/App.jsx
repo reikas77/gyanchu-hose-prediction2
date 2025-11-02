@@ -699,7 +699,10 @@ const HorseAnalysisApp = () => {
       expCoefficient: 0.1,
       createdBy: userId,
       createdTime: new Date().toISOString(),
-      passcode: racePasscode || null
+      passcode: racePasscode || null,
+      confidence: raceConfidence || 3,
+      startTime: raceStartTime || null,
+      viewCount: 0
     };
 
     const racesRef = ref(database, 'races');
