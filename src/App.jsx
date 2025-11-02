@@ -266,6 +266,15 @@ const HorseAnalysisApp = () => {
 
   const [statsType, setStatsType] = useState('winrate');
 
+  // 🆕 新機能用のstate
+  const [raceConfidence, setRaceConfidence] = useState(3); // 自信度（1-5）
+  const [raceStartTime, setRaceStartTime] = useState(''); // 発走時間
+  const [showRenameModal, setShowRenameModal] = useState(false); // レース名変更モーダル
+  const [editingRaceId, setEditingRaceId] = useState(null); // 編集中のレースID
+  const [newRaceName, setNewRaceName] = useState(''); // 新しいレース名
+  const [showEditCourseModal, setShowEditCourseModal] = useState(false); // コース編集モーダル
+  const [editingCourseKey, setEditingCourseKey] = useState(null); // 編集中のコース
+
   // 🔒 パスコード関連のstate
   const [racePasscode, setRacePasscode] = useState('');
   const [showPasscodeModal, setShowPasscodeModal] = useState(false);
