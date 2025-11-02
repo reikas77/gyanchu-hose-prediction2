@@ -1581,11 +1581,47 @@ const HorseAnalysisApp = () => {
                     : races.filter(r => r.result)
                   ).map((race) => (
                     <div
-                      {isAdmin && (
+                      <div
+                      key={race.firebaseId}
+                      onClick={() => handleRaceClick(race)}
+                      className="bg-gradient-to-br from-pink-50 to-purple-50 rounded-2xl md:rounded-3xl p-4 md:p-6 border-2 border-pink-200 hover:border-purple-400 cursor-pointer hover:shadow-lg transition shadow-md hover:scale-105 group"
+                    >
+                      <div className="flex items-start justify-between">
+                        <div className="flex items-start gap-2 flex-1 min-w-0">
+                          <div className="flex-shrink-0 mt-0.5">
+                            {race.passcode ? <LockPixelArt size={20} /> : <HorsePixelArt size={20} />}
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <h3 className="font-bold text-base md:text-lg text-gray-800 truncate flex items-center gap-2">
+                              {race.name}
+                              {race.confidence && renderStars(race.confidence)}
+                            </h3>
+                            <p className="text-xs md:text-sm text-gray-600 mt-1 break-words">
+                              {race.createdAt} · {race.horses.length}頭
+                              {race.courseKey && ` · ${race.courseKey}`}
+                              {race.startTime && (
+                                <span className="block text-xs font-bold text-purple-600 mt-1">
+                                  🕐 {formatStartTime(race.startTime)}
+                                </span>
+                              )}
+                              {(race.viewCount || race.viewCount === 0) && (
+                                <span className="flex items-center gap-1 mt-1">
+                                  <EyePixelArt size={14} />
+                                  <span className="text-xs font-bold">{race.viewCount}回閲覧</span>
+                                </span>
+                              )}
+                              {race.passcode && !isAdmin && (
+                                <span className="text-purple-600 font-bold"> · パスコード必要</span>
+                              )}
+                            </p>
+                          </div>
+                        </div>
+                        
+                        {isAdmin && (
                           <div className="flex flex-col gap-1 opacity-0 group-hover:opacity-100 transition">
                             <button
                               onClick={(e) => {
-                                e.stopPropagation();  // ← これが重要！
+                                e.stopPropagation();
                                 handleRenameRace(race.firebaseId, race.name);
                               }}
                               className="px-2 py-1 bg-blue-400 text-white rounded-full text-xs font-bold hover:bg-blue-500 transition whitespace-nowrap"
@@ -1594,7 +1630,7 @@ const HorseAnalysisApp = () => {
                             </button>
                             <button
                               onClick={(e) => {
-                                e.stopPropagation();  // ← これが重要！
+                                e.stopPropagation();
                                 setRaceToDelete(race.firebaseId);
                                 setShowDeleteConfirm(true);
                               }}
@@ -1605,6 +1641,10 @@ const HorseAnalysisApp = () => {
                             </button>
                           </div>
                         )}
+                      </div>
+                      
+                      {/* 期待値馬表示など... */}
+                    </div>
                     >
                       <div className="flex items-start justify-between mb-3">
                         <div className="flex-1 min-w-0 flex items-start gap-2">
