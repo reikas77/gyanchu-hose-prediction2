@@ -1711,12 +1711,21 @@ const HorseAnalysisApp = () => {
                     >
                       <div className="flex justify-between items-start mb-3">
                         <h3 className="font-bold text-lg text-gray-800">{name}</h3>
-                        <button
-                          onClick={() => deleteCourseSettings(name)}
-                          className="p-2 text-red-500 hover:bg-red-50 rounded-full transition"
-                        >
-                          🗑️
-                        </button>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => handleEditCourse(name)}
+                            className="p-2 text-blue-500 hover:bg-blue-50 rounded-full transition"
+                            title="編集"
+                          >
+                            ✏️
+                          </button>
+                          <button
+                            onClick={() => deleteCourseSettings(name)}
+                            className="p-2 text-red-500 hover:bg-red-50 rounded-full transition"
+                          >
+                            🗑️
+                          </button>
+                        </div>
                       </div>
                       <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-sm">
                         {Object.entries(factorData).map(([factor, weight]) => (
