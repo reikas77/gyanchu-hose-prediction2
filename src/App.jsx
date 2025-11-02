@@ -1591,12 +1591,24 @@ const HorseAnalysisApp = () => {
                             {race.passcode ? <LockPixelArt size={20} /> : <HorsePixelArt size={20} />}
                           </div>
                           <div className="min-w-0 flex-1">
-                            <h3 className="font-bold text-base md:text-lg text-gray-800 truncate">
+                            <h3 className="font-bold text-base md:text-lg text-gray-800 truncate flex items-center gap-2">
                               {race.name}
+                              {race.confidence && renderStars(race.confidence)}
                             </h3>
                             <p className="text-xs md:text-sm text-gray-600 mt-1 break-words">
                               {race.createdAt} · {race.horses.length}頭
                               {race.courseKey && ` · ${race.courseKey}`}
+                              {race.startTime && (
+                                <span className="block text-xs font-bold text-purple-600 mt-1">
+                                  🕐 {formatStartTime(race.startTime)}
+                                </span>
+                              )}
+                              {(race.viewCount || race.viewCount === 0) && (
+                                <span className="flex items-center gap-1 mt-1">
+                                  <EyePixelArt size={14} />
+                                  <span className="text-xs font-bold">{race.viewCount}回閲覧</span>
+                                </span>
+                              )}
                               {race.passcode && !isAdmin && (
                                 <span className="text-purple-600 font-bold"> · パスコード必要</span>
                               )}
