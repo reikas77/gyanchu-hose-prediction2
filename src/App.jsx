@@ -3381,6 +3381,102 @@ const HorseAnalysisApp = () => {
             </div>
           </div>
         )}
+
+        {/* ✏️ レース名変更モーダル */}
+        {showRenameModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+            <div className="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl">
+              <h3 className="text-xl font-bold mb-6 text-gray-800 flex items-center gap-2">
+                <HorsePixelArt size={24} />
+                レース名を変更
+              </h3>
+              
+              <div className="mb-6">
+                <label className="block text-sm font-bold text-gray-700 mb-2">新しいレース名</label>
+                <input
+                  type="text"
+                  value={newRaceName}
+                  onChange={(e) => setNewRaceName(e.target.value)}
+                  className="w-full px-4 py-3 border-2 border-blue-300 rounded-2xl focus:outline-none focus:border-blue-500"
+                  placeholder="新しいレース名"
+                  autoFocus
+                />
+              </div>
+
+              <div className="flex gap-4">
+                <button
+                  onClick={saveRaceName}
+                  className="flex-1 px-4 py-3 bg-gradient-to-r from-blue-400 to-blue-500 text-white rounded-full font-bold shadow-lg hover:shadow-2xl transition"
+                >
+                  保存
+                </button>
+                <button
+                  onClick={() => {
+                    setShowRenameModal(false);
+                    setNewRaceName('');
+                  }}
+                  className="flex-1 px-4 py-3 bg-gray-300 text-gray-800 rounded-full font-bold hover:bg-gray-400 transition"
+                >
+                  キャンセル
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* 🎛️ コース設定編集モーダル */}
+        {showEditCourseModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+            <div className="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl max-h-[90vh] overflow-y-auto">
+              <h3 className="text-xl font-bold mb-6 text-gray-800 flex items-center gap-2">
+                <CrownPixelArt size={24} />
+                {courseName}の設定を編集
+              </h3>
+              
+              <div className="mb-6">
+                <label className="block text-sm font-bold text-gray-700 mb-3">比重設定（合計100%）</label>
+                <div className="space-y-3">
+                  {Object.entries(tempFactors).map(([factor, weight]) => (
+                    <div key={factor} className="flex items-center gap-3">
+                      <label className="w-40 text-sm font-bold text-gray-700">{factor}</label>
+                      <input
+                        type="number"
+                        value={weight}
+                        onChange={(e) => setTempFactors({
+                          ...tempFactors,
+                          [factor]: parseInt(e.target.value) || 0
+                        })}
+                        className="w-20 px-3 py-2 border-2 border-purple-300 rounded-lg focus:outline-none focus:border-purple-500"
+                      />
+                      <span className="text-sm font-bold text-gray-600">%</span>
+                    </div>
+                  ))}
+                </div>
+                <div className="mt-4 p-3 bg-purple-100 rounded-2xl text-sm text-purple-800 font-bold border-2 border-purple-300">
+                  合計: {Object.values(tempFactors).reduce((a, b) => a + b, 0)}%
+                </div>
+              </div>
+
+              <div className="flex gap-4">
+                <button
+                  onClick={saveEditedCourse}
+                  className="flex-1 px-4 py-3 bg-gradient-to-r from-orange-400 to-orange-500 text-white rounded-full font-bold shadow-lg hover:shadow-2xl transition"
+                >
+                  保存
+                </button>
+                <button
+                  onClick={() => {
+                    setShowEditCourseModal(false);
+                    setEditingCourseKey(null);
+                  }}
+                  className="flex-1 px-4 py-3 bg-gray-300 text-gray-800 rounded-full font-bold hover:bg-gray-400 transition"
+                >
+                  キャンセル
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
