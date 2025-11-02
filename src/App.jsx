@@ -1644,7 +1644,7 @@ const HorseAnalysisApp = () => {
                       
                       {/* 期待値馬表示など... */}
                     </div>
-                    >
+                    
                       <div className="flex items-start justify-between mb-3">
                         <div className="flex-1 min-w-0 flex items-start gap-2">
                           <div className="flex-shrink-0 mt-0.5">
