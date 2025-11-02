@@ -133,6 +133,15 @@ const DicePixelArt = ({ size = 24 }) => (
   </svg>
 );
 
+// 👁️ 目のアイコン（新規追加 - 閲覧数表示用）
+const EyePixelArt = ({ size = 24 }) => (
+  <svg width={size} height={size} viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <ellipse cx="8" cy="8" rx="6" ry="4" fill="#4A90E2" />
+    <circle cx="8" cy="8" r="2" fill="#2C3E50" />
+    <circle cx="9" cy="7" r="1" fill="#ECF0F1" />
+  </svg>
+);
+
 // Firebase設定
 const firebaseConfig = {
   apiKey: "AIzaSyBLXleQ28dQR-uDTKlYXSevefzc0vowh9k",
