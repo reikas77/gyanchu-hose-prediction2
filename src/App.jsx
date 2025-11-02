@@ -3,26 +3,39 @@ import { initializeApp } from 'firebase/app';
 import { getDatabase, ref, set, remove, onValue, push } from 'firebase/database';
 import { getAuth, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
 
-// ドット絵コンポーネント
+// ═══════════════════════════════════════════
+// 🎨 ドット絵コンポーネント
+// ═══════════════════════════════════════════
+
 const HorsePixelArt = ({ size = 24 }) => (
   <svg width={size} height={size} viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+    {/* 頭 */}
     <rect x="2" y="6" width="2" height="2" fill="#8B4513" />
     <rect x="4" y="6" width="2" height="2" fill="#8B4513" />
+    {/* 耳 */}
     <rect x="6" y="4" width="2" height="2" fill="#A0522D" />
     <rect x="8" y="4" width="2" height="2" fill="#A0522D" />
+    {/* 体 */}
     <rect x="3" y="8" width="10" height="4" fill="#D2691E" />
+    {/* 脚 */}
     <rect x="4" y="12" width="2" height="3" fill="#8B4513" />
     <rect x="10" y="12" width="2" height="3" fill="#8B4513" />
+    {/* 目 */}
     <circle cx="5" cy="6" r="1" fill="#FFD700" />
   </svg>
 );
 
 const CrownPixelArt = ({ size = 24 }) => (
   <svg width={size} height={size} viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+    {/* ベース */}
     <rect x="2" y="10" width="12" height="2" fill="#FFD700" />
+    {/* スパイク左 */}
     <rect x="3" y="6" width="2" height="4" fill="#FFD700" />
+    {/* スパイク中央 */}
     <rect x="7" y="4" width="2" height="6" fill="#FFD700" />
+    {/* スパイク右 */}
     <rect x="11" y="6" width="2" height="4" fill="#FFD700" />
+    {/* 宝石 */}
     <circle cx="4" cy="5" r="1" fill="#FF69B4" />
     <circle cx="8" cy="3" r="1" fill="#FF69B4" />
     <circle cx="12" cy="5" r="1" fill="#FF69B4" />
@@ -31,9 +44,13 @@ const CrownPixelArt = ({ size = 24 }) => (
 
 const MedalPixelArt = ({ size = 24 }) => (
   <svg width={size} height={size} viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+    {/* 金メダル */}
     <circle cx="4" cy="6" r="3" fill="#FFD700" />
+    {/* 銀メダル */}
     <circle cx="12" cy="6" r="3" fill="#C0C0C0" />
+    {/* 銅メダル */}
     <circle cx="8" cy="4" r="3" fill="#CD7F32" />
+    {/* リボン */}
     <rect x="3" y="9" width="2" height="4" fill="#FF69B4" />
     <rect x="11" y="9" width="2" height="4" fill="#FF69B4" />
     <rect x="7" y="9" width="2" height="5" fill="#FF69B4" />
@@ -56,8 +73,11 @@ const StarPixelArt = ({ size = 24 }) => (
 
 const LockPixelArt = ({ size = 24 }) => (
   <svg width={size} height={size} viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+    {/* 錠前本体 */}
     <rect x="3" y="8" width="10" height="6" fill="#8B4513" />
+    {/* 錠前カギ部 */}
     <rect x="5" y="4" width="6" height="4" fill="#A0522D" stroke="#8B4513" strokeWidth="1" />
+    {/* 鍵穴 */}
     <circle cx="8" cy="11" r="1" fill="#FFD700" />
     <rect x="7" y="6" width="2" height="2" fill="#FFD700" />
   </svg>
@@ -65,6 +85,7 @@ const LockPixelArt = ({ size = 24 }) => (
 
 const HeartPixelArt = ({ size = 24 }) => (
   <svg width={size} height={size} viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+    {/* ハート */}
     <circle cx="5" cy="4" r="2" fill="#FF1493" />
     <circle cx="11" cy="4" r="2" fill="#FF1493" />
     <rect x="3" y="6" width="10" height="8" fill="#FF1493" />
@@ -75,6 +96,7 @@ const HeartPixelArt = ({ size = 24 }) => (
 
 const BarPixelArt = ({ size = 24 }) => (
   <svg width={size} height={size} viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+    {/* グラフ棒 */}
     <rect x="2" y="12" width="2" height="2" fill="#FF69B4" />
     <rect x="5" y="8" width="2" height="6" fill="#FF69B4" />
     <rect x="8" y="5" width="2" height="9" fill="#FF69B4" />
@@ -84,17 +106,25 @@ const BarPixelArt = ({ size = 24 }) => (
 
 const TrophyPixelArt = ({ size = 24 }) => (
   <svg width={size} height={size} viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+    {/* 持ち手左 */}
     <rect x="2" y="4" width="2" height="6" fill="#FFD700" />
+    {/* トロフィー本体 */}
     <rect x="6" y="2" width="4" height="8" fill="#FFD700" />
+    {/* 持ち手右 */}
     <rect x="12" y="4" width="2" height="6" fill="#FFD700" />
+    {/* ベース */}
     <rect x="5" y="10" width="6" height="2" fill="#FFD700" />
+    {/* 台 */}
     <rect x="4" y="12" width="8" height="2" fill="#CD7F32" />
   </svg>
 );
 
+// 🎲 サイコロのアイコン
 const DicePixelArt = ({ size = 24 }) => (
   <svg width={size} height={size} viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+    {/* サイコロ本体 */}
     <rect x="2" y="2" width="12" height="12" fill="#FFFFFF" stroke="#000000" strokeWidth="1" rx="2" />
+    {/* サイコロの点 */}
     <circle cx="5" cy="5" r="1" fill="#000000" />
     <circle cx="8" cy="8" r="1" fill="#000000" />
     <circle cx="11" cy="11" r="1" fill="#000000" />
@@ -103,6 +133,7 @@ const DicePixelArt = ({ size = 24 }) => (
   </svg>
 );
 
+// 👁️ 目のアイコン（閲覧数表示用）
 const EyePixelArt = ({ size = 24 }) => (
   <svg width={size} height={size} viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
     <ellipse cx="8" cy="8" rx="6" ry="4" fill="#4A90E2" />
@@ -122,11 +153,11 @@ const firebaseConfig = {
   measurementId: "G-75KP9PB5YT"
 };
 
+// Firebase初期化
 const app = initializeApp(firebaseConfig);
 const database = getDatabase(app);
 const auth = getAuth(app);
 
-const HorseAnalysisApp = () => {
 const HorseAnalysisApp = () => {
   // アプリのバージョン
   const APP_VERSION = '3.2.0'; // バグ修正版
@@ -262,6 +293,7 @@ const HorseAnalysisApp = () => {
     { name: '斤量', weight: 10, key: '斤量' },
     { name: '調教', weight: 15, key: '調教' }
   ];
+
   // 🎲 仮想レースシミュレーター関数群（改善版）
   
   // 勝率を再配分(合計100%に正規化)
@@ -491,6 +523,7 @@ const HorseAnalysisApp = () => {
       }
     });
   }, []);
+
   const addManualHorse = () => {
     const newHorse = {
       horseNum: manualHorses.length + 1,
@@ -909,6 +942,7 @@ const HorseAnalysisApp = () => {
       </div>
     );
   };
+
   const calculateWinRate = (horses, courseKey = null) => {
     if (!horses || horses.length === 0) return [];
 
@@ -1242,6 +1276,7 @@ const HorseAnalysisApp = () => {
       fukusho: { hits: fukushoHits, rate: ((fukushoHits / recordedRaces.length) * 100).toFixed(1) }
     };
   };
+
   // ✨ ファクター毎の的中率分析関数
   const calculateFactorStats = (courseKey = null) => {
     let recordedRaces = races.filter(r => r.result && r.odds && Object.keys(r.odds).length > 0);
@@ -1424,6 +1459,7 @@ const HorseAnalysisApp = () => {
       </div>
     );
   }
+
   if (!currentRace) {
     const availableCourses = getAvailableCourses();
 
@@ -1654,11 +1690,7 @@ const HorseAnalysisApp = () => {
               )}
             </div>
           )}
-}
-        </div>
-      </div>
-    );
-  }
+
           {activeTab === 'settings' && isAdmin && (
             <div className="bg-white rounded-3xl p-4 md:p-8 shadow-lg border-2 border-purple-200">
               <button
@@ -1915,6 +1947,7 @@ const HorseAnalysisApp = () => {
               </div>
             </div>
           )}
+
           {/* レースデータアップロードモーダル */}
           {showUploadModal && (
             <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
@@ -2144,6 +2177,7 @@ const HorseAnalysisApp = () => {
               </div>
             </div>
           )}
+
           {/* 🔒 パスコード認証モーダル */}
           {showPasscodeModal && (
             <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
@@ -2725,6 +2759,7 @@ const HorseAnalysisApp = () => {
                 </React.Fragment>
               );
             })}
+
             {Object.keys(excludedHorses).length > 0 && (
               <div className="mt-4 md:mt-6 pt-3 md:pt-4 border-t-2 border-gray-300">
                 <p className="text-xs md:text-sm text-gray-600 mb-2 md:mb-3 font-bold">🚫 除外対象：</p>
@@ -3075,6 +3110,7 @@ const HorseAnalysisApp = () => {
             </div>
           </div>
         )}
+
         {/* オッズ入力モーダル */}
         {showOddsModal && isAdmin && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
