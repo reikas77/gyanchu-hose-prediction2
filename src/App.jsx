@@ -480,22 +480,22 @@ const HorseAnalysisApp = () => {
         setUserId(user.uid);
         
         // バージョンチェック
-        const versionRef = ref(database, 'appVersion');
-        onValue(versionRef, snapshot => {
-          const serverVersion = snapshot.val();
-          if (serverVersion && serverVersion !== APP_VERSION) {
-            window.alert('⚠️ アプリが古いバージョンです\n\n最新版を使用するため、ページを更新してください。\n\n更新方法：\n・Ctrl+Shift+R (Windows)\n・Cmd+Shift+R (Mac)');
-            
-            const interval = setInterval(() => {
-              window.alert('⚠️ このバージョンは使用できません\n\nページを更新してください');
-            }, 10000);
-            
-            setIsLoading(false);
-            setRaces([]);
-            return;
-          }
-        });
-        
+//         const versionRef = ref(database, 'appVersion');
+//         onValue(versionRef, snapshot => {
+//           const serverVersion = snapshot.val();
+//           if (serverVersion && serverVersion !== APP_VERSION) {
+//             window.alert('⚠️ アプリが古いバージョンです\n\n最新版を使用するため、ページを更新してください。\n\n更新方法：\n・Ctrl+Shift+R (Windows)\n・Cmd+Shift+R (Mac)');
+//             
+//             const interval = setInterval(() => {
+//               window.alert('⚠️ このバージョンは使用できません\n\nページを更新してください');
+//             }, 10000);
+//             
+//             setIsLoading(false);
+//             setRaces([]);
+//             return;
+//           }
+//         });
+//         
         const racesRef = ref(database, 'races');
         onValue(racesRef, snapshot => {
           const data = snapshot.val();
