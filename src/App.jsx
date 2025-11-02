@@ -2501,6 +2501,7 @@ const HorseAnalysisApp = () => {
       </div>
     );
   }
+
   // レース詳細画面
   const resultsWithRate = calculateWinRate(currentRace.horses, raceSelectedCourse);
   const expectationRanking = calculateExpectationRanking(resultsWithRate, oddsInput);
