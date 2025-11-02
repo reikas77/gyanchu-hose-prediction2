@@ -861,6 +861,84 @@ const HorseAnalysisApp = () => {
     }
   };
 
+// ✏️ レース名を変更
+  const handleRenameRace = (raceId, currentName) => {
+    setEditingRaceId(raceId);
+    setNewRaceName(currentName);
+    setShowRenameModal(true);
+  };
+
+  const saveRaceName = () => {
+    if (editingRaceId && newRaceName.trim()) {
+      const raceRef = ref(database, `races/${editingRaceId}/name`);
+      set(raceRef, newRaceName.trim())
+        .then(() => {
+          setShowRenameModal(false);
+          setEditingRaceId(null);
+          setNewRaceName('');
+        })
+        .catch((error) => {
+          console.error('レース名の更新に失敗:', error);
+          alert('レース名の更新に失敗しました');
+        });
+    }
+  };
+
+  // 🎛️ コース設定を編集
+  const handleEditCourse = (courseKey) => {
+    const courseData = courseSettings[courseKey];
+    if (courseData) {
+      setEditingCourseKey(courseKey);
+      setCourseName(courseKey);
+      setTempFactors(courseData);
+      setShowEditCourseModal(true);
+    }
+  };
+
+  const saveEditedCourse = () => {
+    if (editingCourseKey && courseName.trim()) {
+      const settingsRef = ref(database, `courseSettings/${courseName}`);
+      set(settingsRef, tempFactors)
+        .then(() => {
+          setShowEditCourseModal(false);
+          setEditingCourseKey(null);
+          setCourseName('');
+        })
+        .catch((error) => {
+          console.error('コース設定の更新に失敗:', error);
+          alert('コース設定の更新に失敗しました');
+        });
+    }
+  };
+
+  // 🕐 発走時間をフォーマット
+  const formatStartTime = (dateTimeString) => {
+    if (!dateTimeString) return '';
+    const date = new Date(dateTimeString);
+    const month = date.getMonth() + 1;
+    const day = date.getDate();
+    const hours = date.getHours();
+    const minutes = date.getMinutes().toString().padStart(2, '0');
+    return `${month}月${day}日 ${hours}:${minutes}発走`;
+  };
+
+  // ⭐ 星を表示
+  const renderStars = (count) => {
+    return (
+      <div className="flex gap-1">
+        {[1, 2, 3, 4, 5].map((star) => (
+          <span
+            key={star}
+            className={star <= count ? "text-yellow-400" : "text-gray-300"}
+            style={{ fontSize: '14px' }}
+          >
+            ★
+          </span>
+        ))}
+      </div>
+    );
+  };
+  
   const calculateWinRate = (horses, courseKey = null) => {
     if (!horses || horses.length === 0) return [];
 
