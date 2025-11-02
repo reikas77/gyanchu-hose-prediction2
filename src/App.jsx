@@ -160,7 +160,7 @@ const auth = getAuth(app);
 
 const HorseAnalysisApp = () => {
   // アプリのバージョン（更新時にこの数字を増やす）
-  const APP_VERSION = '3.0.0'; // 仮想レース機能追加版
+  const APP_VERSION = '3.1.0'; // 新機能5つ追加版：レース名変更、コース編集、自信度、発走時間、閲覧数
   
   // バージョンチェックを無効化する場合はこれをtrueに
   const DISABLE_VERSION_CHECK = true;
