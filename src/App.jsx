@@ -158,6 +158,117 @@ const app = initializeApp(firebaseConfig);
 const database = getDatabase(app);
 const auth = getAuth(app);
 
+// ═══════════════════════════════════════════
+// 🔄 JRA-VAN Data Lab 設定
+// ═══════════════════════════════════════════
+
+// 競馬場コード対応表
+const JRA_VENUES = {
+  '札幌': { code: '01', name: '札幌' },
+  '函館': { code: '02', name: '函館' },
+  '福島': { code: '03', name: '福島' },
+  '新潟': { code: '04', name: '新潟' },
+  '東京': { code: '05', name: '東京' },
+  '中山': { code: '06', name: '中山' },
+  '中京': { code: '07', name: '中京' },
+  '京都': { code: '08', name: '京都' },
+  '阪神': { code: '09', name: '阪神' },
+  '小倉': { code: '10', name: '小倉' }
+};
+
+// JRA-VAN APIからオッズを取得
+const fetchJraVanOdds = async (venueCode, raceDate, raceNumber) => {
+  const apiKey = import.meta.env.VITE_JRAVAN_API_KEY;
+  
+  if (!apiKey) {
+    throw new Error('APIキーが設定されていません。設定ファイルを確認してください。');
+  }
+
+  try {
+    // JRA-VAN Data Lab APIエンドポイント
+    // 注意: 実際のエンドポイントはJRA-VAN公式ドキュメントを参照してください
+    // ここでは一般的な形式を使用（実際のAPIに合わせて調整が必要）
+    const baseUrl = 'https://api.jra-van.jp/dl';
+    const endpoint = `${baseUrl}/odds/${venueCode}/${raceDate}/${raceNumber}`;
+    
+    const response = await fetch(endpoint, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+        'X-API-Key': apiKey
+      }
+    });
+
+    if (!response.ok) {
+      if (response.status === 401 || response.status === 403) {
+        throw new Error('APIキーが無効です。設定を確認してください。');
+      }
+      if (response.status === 429) {
+        throw new Error('アクセス制限中。しばらく待ってから再試行します。');
+      }
+      if (response.status === 404) {
+        throw new Error('該当レースが見つかりません。');
+      }
+      throw new Error(`APIエラー: ${response.status}`);
+    }
+
+    const data = await response.json();
+    
+    // レスポンスから馬番→オッズのマッピングを作成
+    // 実際のAPIレスポンス構造に合わせて調整が必要
+    const oddsMapping = {};
+    
+    // レスポンスの構造に応じて調整
+    if (data.horses && Array.isArray(data.horses)) {
+      data.horses.forEach(horse => {
+        if (horse.horseNumber && horse.odds !== undefined) {
+          oddsMapping[horse.horseNumber] = parseFloat(horse.odds) || 0;
+        }
+      });
+    } else if (data.odds && Array.isArray(data.odds)) {
+      data.odds.forEach(item => {
+        if (item.horseNumber && item.tanshoOdds !== undefined) {
+          oddsMapping[item.horseNumber] = parseFloat(item.tanshoOdds) || 0;
+        }
+      });
+    }
+
+    return oddsMapping;
+    
+  } catch (error) {
+    if (error.message.includes('Failed to fetch') || error.message.includes('Network')) {
+      throw new Error('接続エラー。ネットワーク接続を確認してください。');
+    }
+    throw error;
+  }
+};
+
+// 更新間隔を計算（発走時刻に基づく）
+const calculateUpdateInterval = (startTime) => {
+  if (!startTime) return 300; // デフォルト5分
+  
+  const now = new Date();
+  const start = new Date(startTime);
+  const diffMinutes = (start - now) / 1000 / 60;
+  
+  if (diffMinutes <= 0) return null; // 発走後は更新停止
+  if (diffMinutes <= 5) return 30;   // 5分前から30秒ごと
+  if (diffMinutes <= 10) return 60;  // 10分前から1分ごと
+  return 300; // それ以前は5分ごと
+};
+
+// 発走時刻の10分前かどうかをチェック
+const shouldStartAutoUpdate = (startTime) => {
+  if (!startTime) return false;
+  
+  const now = new Date();
+  const start = new Date(startTime);
+  const diffMinutes = (start - now) / 1000 / 60;
+  
+  return diffMinutes <= 10 && diffMinutes > 0; // 10分前から発走まで
+};
+
 const HorseAnalysisApp = () => {
   // アプリのバージョン
   const APP_VERSION = '3.2.0'; // バグ修正版
@@ -249,6 +360,22 @@ const HorseAnalysisApp = () => {
   const [showExpModal, setShowExpModal] = useState(false);
   const [tempExpCoefficient, setTempExpCoefficient] = useState(0.1);
 
+  // 🔄 JRA-VAN自動更新関連のstate
+  const [showJraVanModal, setShowJraVanModal] = useState(false);
+  const [jraVanConfig, setJraVanConfig] = useState({
+    enabled: false,
+    venue: '',
+    venueCode: '',
+    raceNumber: 1,
+    raceDate: new Date().toISOString().split('T')[0].replace(/-/g, ''),
+    lastUpdated: null,
+    nextUpdateAt: null,
+    updateInterval: 300,
+    error: null
+  });
+  const [isUpdatingOdds, setIsUpdatingOdds] = useState(false);
+  const [toast, setToast] = useState(null);
+
   // 🎲 仮想レース関連のstate
   const [showVirtualRaceModal, setShowVirtualRaceModal] = useState(false);
   const [virtualRaceResults, setVirtualRaceResults] = useState(null);
@@ -295,19 +422,6 @@ const HorseAnalysisApp = () => {
 
   // 仮想レース視覚化用のstate
   const [showTrackDiagram, setShowTrackDiagram] = useState(false);
-
-  // オッズ自動取得用のstate
-  const [showFetchOddsModal, setShowFetchOddsModal] = useState(false);
-  const [oddsFetchMode, setOddsFetchMode] = useState('paste'); // 'url' | 'paste' | 'manual'
-  const [oddsFetchUrl, setOddsFetchUrl] = useState('');
-  const [oddsPasteText, setOddsPasteText] = useState('');
-  const [isFetchingOdds, setIsFetchingOdds] = useState(false);
-  const [oddsFetchMessage, setOddsFetchMessage] = useState('');
-  const [oddsLastUpdated, setOddsLastUpdated] = useState(null);
-  const [showDebugInfo, setShowDebugInfo] = useState(false);
-  const [debugHtml, setDebugHtml] = useState('');
-  const [debugParsed, setDebugParsed] = useState(null);
-  const [manualOddsInput, setManualOddsInput] = useState({}); // { horseNum: odds }
 
   const factors = [
     { name: '能力値', weight: 15, key: 'タイム指数' },
@@ -1050,373 +1164,6 @@ const HorseAnalysisApp = () => {
     return candidates.sort((a, b) => b.winRate - a.winRate)[0];
   };
 
-  // オッズ取得: テキスト解析（貼り付け）大幅強化版
-  const parseOddsFromText = (text) => {
-    console.log('===== テキスト解析開始 =====');
-    console.log('入力テキスト（最初の500文字）:', text.substring(0, 500));
-    
-    const oddsByHorseNum = {};
-    const lines = (text || '').split(/\n|\r/).map(l => l.trim()).filter(Boolean);
-    const nameToNum = new Map(currentRace.horses.map(h => [h.name.replace(/\s+/g, ''), h.horseNum]));
-    const allHorseNums = new Set(currentRace.horses.map(h => h.horseNum));
-    
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i];
-      
-      // パターン1: 馬番 オッズ (タブ区切りやスペース区切り)
-      // 例: "1	2.3" または "1 2.3" または "01\t2.3"
-      const m1 = line.match(/^(\d{1,2})[\s\t]+([\d.]+)(?:\s|$)/);
-      if (m1) {
-        const num = parseInt(m1[1], 10);
-        const odds = parseFloat(m1[2]);
-        if (allHorseNums.has(num) && odds > 0 && odds < 1000) {
-          oddsByHorseNum[num] = odds;
-          console.log(`✅ 馬番${num}: ${odds}倍（パターン1: タブ/スペース区切り）`);
-          continue;
-        }
-      }
-      
-      // パターン2: 馬番 馬名 オッズ
-      // 例: "1 ウマタロウ 2.3" または "01 馬名\t2.3"
-      const m2 = line.match(/^(\d{1,2})[\s\t]+([\u3040-\u30FF\u4E00-\u9FFF\w\s\-・。、（）()]+?)[\s\t]+([\d.]+)/);
-      if (m2) {
-        const num = parseInt(m2[1], 10);
-        const odds = parseFloat(m2[3]);
-        if (allHorseNums.has(num) && odds > 0 && odds < 1000) {
-          oddsByHorseNum[num] = odds;
-          console.log(`✅ 馬番${num}: ${odds}倍（パターン2: 馬番 馬名 オッズ）`);
-          continue;
-        }
-      }
-      
-      // パターン3: 馬名 オッズ（馬名一致）
-      // 例: "ウマタロウ 2.3" または "馬名\t2.3"
-      const m3 = line.match(/^([\u3040-\u30FF\u4E00-\u9FFF\w\s\-・。、（）()]+?)[\s\t]+([\d.]+)/);
-      if (m3) {
-        const nm = (m3[1] || '').replace(/\s+/g, '');
-        const odds = parseFloat(m3[2]);
-        const num = nameToNum.get(nm);
-        if (num && odds > 0 && odds < 1000) {
-          oddsByHorseNum[num] = odds;
-          console.log(`✅ 馬番${num}: ${odds}倍（パターン3: 馬名 ${nm}）`);
-          continue;
-        }
-      }
-      
-      // パターン4: CSV形式（カンマ区切り）
-      // 例: "1,ウマタロウ,2.3" または "1,2.3"
-      const m4 = line.match(/^(\d{1,2}),[\s]*(?:[^,]*,[\s]*)?([\d.]+)/);
-      if (m4) {
-        const num = parseInt(m4[1], 10);
-        const odds = parseFloat(m4[2]);
-        if (allHorseNums.has(num) && odds > 0 && odds < 1000) {
-          oddsByHorseNum[num] = odds;
-          console.log(`✅ 馬番${num}: ${odds}倍（パターン4: CSV形式）`);
-          continue;
-        }
-      }
-      
-      // パターン5: HTMLのテーブル行から抽出
-      // 例: "<td>1</td><td>2.3</td>"
-      if (line.includes('<td>') || line.includes('<TD>')) {
-        const numMatch = line.match(/<t[dh][^>]*>(\d{1,2})<\/t[dh]>/i);
-        const oddsMatches = line.matchAll(/<t[dh][^>]*>([\d.]+)<\/t[dh]>/gi);
-        if (numMatch) {
-          const num = parseInt(numMatch[1], 10);
-          if (allHorseNums.has(num)) {
-            for (const oddsMatch of oddsMatches) {
-              const odds = parseFloat(oddsMatch[1]);
-              if (odds > 0 && odds < 1000) {
-                oddsByHorseNum[num] = odds;
-                console.log(`✅ 馬番${num}: ${odds}倍（パターン5: HTMLテーブル）`);
-                break;
-              }
-            }
-          }
-        }
-      }
-    }
-    
-    console.log('解析結果:', oddsByHorseNum);
-    const missing = currentRace.horses.filter(h => !oddsByHorseNum[h.horseNum]).map(h => h.horseNum);
-    console.log('取得できなかった馬番:', missing.length > 0 ? missing.join(', ') : 'なし');
-    console.log('===== テキスト解析完了 =====');
-    
-    return oddsByHorseNum;
-  };
-
-  // オッズ取得: HTML解析（JRA / netkeiba を詳細に抽出）
-  const parseOddsFromHtml = (html, url = '') => {
-    console.log('===== オッズ取得開始 =====');
-    console.log('URL:', url);
-    console.log('取得したHTML（最初の1000文字）:', html.substring(0, 1000));
-    
-    const oddsByHorseNum = {};
-    const nameToNum = new Map(currentRace.horses.map(h => [h.name.replace(/\s+/g, ''), h.horseNum]));
-    const allHorseNums = new Set(currentRace.horses.map(h => h.horseNum));
-    
-    // netkeiba.com用パターン
-    if (url.includes('netkeiba.com')) {
-      console.log('🔍 netkeiba.comパーサーを使用');
-      // パターン1: <td class="num">1</td>...<td class="tan">2.3</td>
-      const tableRowMatches = html.matchAll(/<tr[^>]*>[\s\S]*?<\/tr>/gi);
-      for (const rowMatch of tableRowMatches) {
-        const row = rowMatch[0];
-        // 馬番抽出
-        const numMatch = row.match(/<td[^>]*class="num"[^>]*>(\d{1,2})<\/td>/i);
-        if (!numMatch) continue;
-        const num = parseInt(numMatch[1], 10);
-        if (!allHorseNums.has(num)) continue;
-        
-        // 単勝オッズ抽出（tanクラスまたはtd内の数値）
-        const oddsMatch = row.match(/<td[^>]*class="tan"[^>]*>([\d.]+)<\/td>/i) || 
-                         row.match(/<td[^>]*>[\s\S]*?(\d{1,3}\.\d{1,2})[\s\S]*?<\/td>/i);
-        if (oddsMatch) {
-          const odds = parseFloat(oddsMatch[1]);
-          if (num > 0 && odds > 0 && odds < 1000) {
-            oddsByHorseNum[num] = odds;
-            console.log(`✅ 馬番${num}: ${odds}倍（netkeibaパターン1）`);
-          }
-        }
-      }
-      
-      // パターン2: データ属性やJSON構造から取得
-      const jsonMatch = html.match(/window\.raceInfo\s*=\s*({[\s\S]*?});/);
-      if (jsonMatch) {
-        try {
-          const raceInfo = JSON.parse(jsonMatch[1]);
-          if (raceInfo.tansho && Array.isArray(raceInfo.tansho)) {
-            raceInfo.tansho.forEach(item => {
-              if (item.umaban && item.ninki_bairitsu) {
-                const num = parseInt(item.umaban, 10);
-                const odds = parseFloat(item.ninki_bairitsu);
-                if (num > 0 && odds > 0 && allHorseNums.has(num)) {
-                  oddsByHorseNum[num] = odds;
-                  console.log(`✅ 馬番${num}: ${odds}倍（netkeiba JSON）`);
-                }
-              }
-            });
-          }
-        } catch (e) {
-          console.warn('JSON解析失敗:', e);
-        }
-      }
-    }
-    
-    // JRA公式サイト用パターン
-    if (url.includes('jra.go.jp')) {
-      console.log('🔍 JRA公式サイトパーサーを使用');
-      // パターン1: テーブル構造から取得
-      const tableRowMatches = html.matchAll(/<tr[^>]*>[\s\S]*?<\/tr>/gi);
-      for (const rowMatch of tableRowMatches) {
-        const row = rowMatch[0];
-        // 馬番とオッズを抽出
-        const numMatch = row.match(/馬番[^>]*>(\d{1,2})<\/|(\d{1,2})\s*番/i);
-        const oddsMatch = row.match(/(\d{1,3}\.\d{1,2})\s*倍|単勝[^>]*>([\d.]+)</i);
-        
-        if (numMatch && oddsMatch) {
-          const num = parseInt(numMatch[1] || numMatch[2], 10);
-          const odds = parseFloat(oddsMatch[1] || oddsMatch[2]);
-          if (num > 0 && odds > 0 && allHorseNums.has(num)) {
-            oddsByHorseNum[num] = odds;
-            console.log(`✅ 馬番${num}: ${odds}倍（JRAパターン1）`);
-          }
-        }
-      }
-    }
-    
-    // 汎用パターン（上記で取得できなかった場合）
-    if (Object.keys(oddsByHorseNum).length === 0) {
-      console.log('🔍 汎用パーサーを使用');
-      const text = html.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '').replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '');
-      const lines = text.replace(/<[^>]*>/g, ' ').split(/\s+/).filter(Boolean);
-      
-      // 馬番とオッズの組み合わせを探す
-      for (let i = 0; i < lines.length - 1; i++) {
-        const numMatch = lines[i].match(/^(\d{1,2})$/);
-        if (numMatch) {
-          const num = parseInt(numMatch[1], 10);
-          if (!allHorseNums.has(num)) continue;
-          
-          // 次の数値がオッズの可能性
-          const nextOddsMatch = lines[i + 1].match(/^(\d{1,3}\.\d{1,2})$/);
-          if (nextOddsMatch) {
-            const odds = parseFloat(nextOddsMatch[1]);
-            if (odds > 0 && odds < 1000 && !oddsByHorseNum[num]) {
-              oddsByHorseNum[num] = odds;
-              console.log(`✅ 馬番${num}: ${odds}倍（汎用パターン）`);
-            }
-          }
-        }
-      }
-    }
-    
-    console.log('抽出した生データ:', oddsByHorseNum);
-    console.log('取得できた馬番:', Object.keys(oddsByHorseNum).map(n => `${n}番`).join(', '));
-    const missing = currentRace.horses.filter(h => !oddsByHorseNum[h.horseNum]).map(h => h.horseNum);
-    console.log('取得できなかった馬番:', missing.length > 0 ? missing.join(', ') : 'なし');
-    console.log('===== オッズ取得完了 =====');
-    
-    return oddsByHorseNum;
-  };
-
-  // オッズ保存（既存がある場合は確認・フォールバック処理）
-  const saveOddsWithConfirm = (newOdds, mergeWithExisting = true) => {
-    if (!newOdds || Object.keys(newOdds).length === 0) {
-      setOddsFetchMessage('❌ 取得失敗：手動入力してください');
-      return;
-    }
-    
-    const totalHorses = currentRace.horses.length;
-    const fetchedCount = Object.keys(newOdds).length;
-    const missingNums = currentRace.horses
-      .filter(h => !newOdds[h.horseNum])
-      .map(h => h.horseNum)
-      .sort((a, b) => a - b);
-    
-    let finalOdds = { ...newOdds };
-    
-    // フォールバック: 既存オッズとマージ
-    if (mergeWithExisting && currentRace.odds && Object.keys(currentRace.odds).length > 0) {
-      Object.entries(currentRace.odds).forEach(([num, odds]) => {
-        if (!finalOdds[num] && odds > 0) {
-          finalOdds[num] = odds;
-        }
-      });
-    }
-    
-    const hasExisting = currentRace.odds && Object.keys(currentRace.odds).length > 0;
-    if (hasExisting && fetchedCount > 0) {
-      const ok = window.confirm(
-        `${fetchedCount}頭のオッズを取得しました。\n` +
-        (missingNums.length > 0 ? `取得できなかった馬: ${missingNums.join(', ')}番\n` : '') +
-        `既存のオッズを更新しますか？`
-      );
-      if (!ok) return;
-    }
-    
-    updateRaceOdds(finalOdds);
-    const now = new Date();
-    setOddsLastUpdated(now.toISOString());
-    const raceRef = ref(database, `races/${currentRace.firebaseId}/oddsUpdatedAt`);
-    set(raceRef, now.toISOString());
-    
-    let message = `✅ オッズを更新しました（${fetchedCount}頭`;
-    if (totalHorses > fetchedCount) {
-      message += `/${totalHorses}頭`;
-    }
-    message += '）';
-    if (missingNums.length > 0) {
-      message += `\n取得できなかった馬: ${missingNums.join(', ')}番`;
-    }
-    setOddsFetchMessage(message);
-    
-    setTimeout(() => {
-      setShowFetchOddsModal(false);
-      setOddsFetchMessage('');
-    }, 2000);
-  };
-
-  // URLから取得（CORS回避: allorigins）
-  const fetchOddsFromUrl = async () => {
-    if (!oddsFetchUrl || !/^https?:\/\//i.test(oddsFetchUrl)) {
-      setOddsFetchMessage('❌ URLが無効です');
-      return;
-    }
-    try {
-      setIsFetchingOdds(true);
-      setOddsFetchMessage('取得中...⏳');
-      setDebugHtml('');
-      setDebugParsed(null);
-      
-      console.log('===== URL取得開始 =====');
-      console.log('入力URL:', oddsFetchUrl);
-      
-      // URL正規化（narの出馬表→オッズに置き換え）
-      let targetUrl = oddsFetchUrl.trim();
-      if (/nar\.netkeiba\.com/.test(targetUrl) && /shutuba\.html/.test(targetUrl)) {
-        targetUrl = targetUrl.replace('shutuba.html', 'odds.html');
-        console.log('URLをオッズページへ補正:', targetUrl);
-      }
-
-      // まずは AllOrigins 経由で取得（UTF-8系/JRA想定）
-      let proxied = `https://api.allorigins.win/raw?url=${encodeURIComponent(targetUrl)}`;
-      console.log('一次プロキシURL (AllOrigins):', proxied);
-      let res = await fetch(proxied, { method: 'GET' });
-      if (!res.ok) {
-        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
-      }
-      
-      let html = await res.text();
-      console.log('取得HTMLサイズ(一次):', html.length, '文字');
-      
-      // デバッグ用にHTMLを保存（常に保存して、チェックボックスで表示制御）
-      setDebugHtml(html.substring(0, 5000)); // 最初の5000文字
-      
-      let odds = parseOddsFromHtml(html, targetUrl);
-      console.log('パース後のデータ:', odds);
-      
-      // デバッグ用にパース結果を保存（常に保存して、チェックボックスで表示制御）
-      setDebugParsed(odds);
-      
-      // 検証: 0以下/NaNを除去
-      const cleaned = Object.fromEntries(
-        Object.entries(odds).filter(([k, v]) => {
-          const isValid = typeof v === 'number' && !isNaN(v) && v > 0 && v < 1000;
-          if (!isValid && v) {
-            console.warn(`⚠️ 無効なオッズ値（馬番${k}）:`, v);
-          }
-          return isValid;
-        })
-      );
-      
-      console.log('クリーニング後のデータ:', cleaned);
-      console.log('取得できた頭数:', Object.keys(cleaned).length);
-      // 0件の場合は nar(EUC-JP) 向けに r.jina.ai で再取得して再パース
-      if (Object.keys(cleaned).length === 0 && /nar\.netkeiba\.com/.test(targetUrl)) {
-        const jinaUrl = `https://r.jina.ai/http://${targetUrl.replace(/^https?:\/\//, '')}`;
-        console.log('二次プロキシURL (r.jina.ai):', jinaUrl);
-        res = await fetch(jinaUrl, { method: 'GET' });
-        if (res.ok) {
-          html = await res.text();
-          console.log('取得HTMLサイズ(二次):', html.length, '文字');
-          setDebugHtml(html.substring(0, 5000));
-          odds = parseOddsFromHtml(html, targetUrl);
-          setDebugParsed(odds);
-          const cleaned2 = Object.fromEntries(
-            Object.entries(odds).filter(([k, v]) => typeof v === 'number' && !isNaN(v) && v > 0 && v < 1000)
-          );
-          console.log('クリーニング後のデータ(二次):', cleaned2);
-          if (Object.keys(cleaned2).length > 0) {
-            saveOddsWithConfirm(cleaned2);
-            return;
-          }
-        }
-      }
-
-      if (Object.keys(cleaned).length > 0) {
-        saveOddsWithConfirm(cleaned);
-      } else {
-        const errorMsg = '❌ 取得できませんでした。\n' +
-          '・URLが正しいオッズページか確認してください（出馬表→odds.html）\n' +
-          '・「貼り付け」タブで手動入力してください\n' +
-          '・デバッグ情報を表示して確認してください';
-        setOddsFetchMessage(errorMsg);
-        setIsFetchingOdds(false);
-        return;
-      }
-    } catch (e) {
-      console.error('❌ 取得エラー:', e);
-      const errorMsg = `❌ 取得失敗：${e.message}\n` +
-        'ネットワークエラーまたはHTML構造の変更の可能性があります。\n' +
-        '「貼り付け」タブで手動入力してください。';
-      setOddsFetchMessage(errorMsg);
-      setIsFetchingOdds(false);
-    } finally {
-      setIsFetchingOdds(false);
-    }
-  };
-
   // 買い目自動生成
   const generateBettingRecommendations = () => {
     const budget = bettingBudget;
@@ -1845,6 +1592,216 @@ const HorseAnalysisApp = () => {
     setCurrentRace({ ...currentRace, odds });
   };
 
+  // 🔄 Toast通知を表示
+  const showToast = (message, type = 'success') => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 3000);
+  };
+
+  // 🔄 JRA-VANオッズを手動更新
+  const manualUpdateJraVanOdds = async () => {
+    if (!currentRace || !currentRace.jraVanConfig) return;
+
+    const config = currentRace.jraVanConfig;
+    if (!config.enabled || !config.venueCode || !config.raceDate || !config.raceNumber) {
+      showToast('自動更新設定が不完全です。', 'error');
+      return;
+    }
+
+    setIsUpdatingOdds(true);
+    try {
+      const odds = await fetchJraVanOdds(config.venueCode, config.raceDate, config.raceNumber);
+      
+      // Firebaseに保存
+      const updatedRace = {
+        ...currentRace,
+        odds,
+        jraVanConfig: {
+          ...config,
+          lastUpdated: new Date().toISOString(),
+          error: null
+        }
+      };
+
+      const raceRef = ref(database, `races/${currentRace.firebaseId}`);
+      await set(raceRef, updatedRace);
+      setCurrentRace(updatedRace);
+
+      showToast('オッズを更新しました', 'success');
+    } catch (error) {
+      const errorMessage = error.message || '取得失敗';
+      showToast(`取得失敗: ${errorMessage}`, 'error');
+      
+      // エラーをFirebaseに保存
+      if (currentRace.jraVanConfig) {
+        const raceRef = ref(database, `races/${currentRace.firebaseId}`);
+        await set(raceRef, {
+          ...currentRace,
+          jraVanConfig: {
+            ...currentRace.jraVanConfig,
+            error: errorMessage
+          }
+        });
+      }
+    } finally {
+      setIsUpdatingOdds(false);
+    }
+  };
+
+  // 🔄 JRA-VAN自動更新タイマー
+  useEffect(() => {
+    if (!currentRace || !currentRace.jraVanConfig?.enabled) return;
+
+    const config = currentRace.jraVanConfig;
+    if (!config.venueCode || !config.raceDate || !config.raceNumber) return;
+
+    // 発走時刻のチェック
+    const startTime = currentRace.startTime || raceStartTime;
+    
+    // 10分前でない場合は更新しない（ただし手動更新は可能）
+    if (startTime && !shouldStartAutoUpdate(startTime)) {
+      return;
+    }
+
+    let isMounted = true;
+
+    const updateOdds = async () => {
+      if (!isMounted || !currentRace) return;
+
+      try {
+        const odds = await fetchJraVanOdds(config.venueCode, config.raceDate, config.raceNumber);
+        
+        if (!isMounted) return;
+
+        const currentStartTime = currentRace.startTime || raceStartTime;
+        const updatedConfig = {
+          ...config,
+          lastUpdated: new Date().toISOString(),
+          updateInterval: calculateUpdateInterval(currentStartTime),
+          error: null
+        };
+
+        // 次回更新時刻を計算
+        const interval = updatedConfig.updateInterval;
+        if (interval) {
+          const nextUpdate = new Date(Date.now() + interval * 1000);
+          updatedConfig.nextUpdateAt = nextUpdate.toISOString();
+        }
+
+        const updatedRace = {
+          ...currentRace,
+          odds,
+          jraVanConfig: updatedConfig
+        };
+
+        const raceRef = ref(database, `races/${currentRace.firebaseId}`);
+        await set(raceRef, updatedRace);
+        
+        if (isMounted) {
+          setCurrentRace(updatedRace);
+        }
+      } catch (error) {
+        if (!isMounted) return;
+        
+        const errorMessage = error.message || '取得失敗';
+        const raceRef = ref(database, `races/${currentRace.firebaseId}`);
+        await set(raceRef, {
+          ...currentRace,
+          jraVanConfig: {
+            ...config,
+            error: errorMessage
+          }
+        });
+      }
+    };
+
+    // 初回更新（発走時刻の10分前の場合のみ）
+    if (startTime && shouldStartAutoUpdate(startTime)) {
+      updateOdds();
+    }
+
+    // 間隔を計算してタイマーを設定
+    const interval = calculateUpdateInterval(startTime);
+    if (!interval) return; // 発走後は更新停止
+
+    const timer = setInterval(updateOdds, interval * 1000);
+
+    return () => {
+      isMounted = false;
+      clearInterval(timer);
+    };
+  }, [currentRace?.firebaseId, currentRace?.jraVanConfig?.enabled, currentRace?.jraVanConfig?.venueCode, 
+      currentRace?.jraVanConfig?.raceDate, currentRace?.jraVanConfig?.raceNumber, 
+      currentRace?.startTime, raceStartTime]);
+
+  // 🔄 JRA-VAN設定を保存
+  const saveJraVanConfig = async () => {
+    if (!currentRace) return;
+
+    const venueInfo = JRA_VENUES[jraVanConfig.venue];
+    if (!venueInfo) {
+      showToast('競馬場を選択してください', 'error');
+      return;
+    }
+
+    if (!jraVanConfig.raceDate || !jraVanConfig.raceNumber) {
+      showToast('レース日とレース番号を入力してください', 'error');
+      return;
+    }
+
+    // displayDateを削除して、raceDateのみ保存
+    const { displayDate, ...configWithoutDisplay } = jraVanConfig;
+    
+    const updatedConfig = {
+      ...configWithoutDisplay,
+      venueCode: venueInfo.code,
+      lastUpdated: null,
+      nextUpdateAt: null,
+      error: null
+    };
+
+    const updatedRace = {
+      ...currentRace,
+      jraVanConfig: updatedConfig
+    };
+
+    const raceRef = ref(database, `races/${currentRace.firebaseId}`);
+    await set(raceRef, updatedRace);
+    setCurrentRace(updatedRace);
+
+    showToast('設定を保存しました', 'success');
+    setShowJraVanModal(false);
+  };
+
+  // 🔄 JRA-VAN設定モーダルを開く
+  const openJraVanModal = () => {
+    if (!currentRace) return;
+
+    const existingConfig = currentRace.jraVanConfig || {
+      enabled: false,
+      venue: '',
+      venueCode: '',
+      raceNumber: 1,
+      raceDate: new Date().toISOString().split('T')[0].replace(/-/g, ''),
+      lastUpdated: null,
+      nextUpdateAt: null,
+      updateInterval: 300,
+      error: null
+    };
+
+    // raceDateがYYYYMMDD形式の場合、表示用に変換
+    const displayDate = existingConfig.raceDate.length === 8 
+      ? `${existingConfig.raceDate.slice(0, 4)}-${existingConfig.raceDate.slice(4, 6)}-${existingConfig.raceDate.slice(6, 8)}`
+      : new Date().toISOString().split('T')[0];
+
+    setJraVanConfig({
+      ...existingConfig,
+      raceDate: existingConfig.raceDate || new Date().toISOString().split('T')[0].replace(/-/g, ''),
+      displayDate: displayDate
+    });
+    setShowJraVanModal(true);
+  };
+
   const updateRaceMemo = (newMemo) => {
     const raceRef = ref(database, `races/${currentRace.firebaseId}`);
     set(raceRef, {
@@ -2145,6 +2102,28 @@ const HorseAnalysisApp = () => {
                           )}
                           {race.passcode && !isAdmin && (
                             <span className="text-xs text-purple-600 font-bold">🔒 要パスコード</span>
+                          )}
+                          {race.jraVanConfig?.enabled && (
+                            <div className="flex items-center gap-2 mt-2">
+                              <span className={`text-sm ${isUpdatingOdds && currentRace?.firebaseId === race.firebaseId ? 'animate-spin' : ''}`}>
+                                🔄
+                              </span>
+                              <span className="text-xs font-bold text-blue-600">
+                                {isUpdatingOdds && currentRace?.firebaseId === race.firebaseId ? '更新中...' : '自動更新ON'}
+                              </span>
+                              {race.jraVanConfig.lastUpdated && (
+                                <span className="text-xs text-gray-500">
+                                  · {(() => {
+                                    const last = new Date(race.jraVanConfig.lastUpdated);
+                                    const now = new Date();
+                                    const diff = Math.round((now - last) / 1000 / 60);
+                                    if (diff < 1) return '1分未満';
+                                    if (diff < 60) return `${diff}分前`;
+                                    return `${Math.round(diff / 60)}時間前`;
+                                  })()}
+                                </span>
+                              )}
+                            </div>
                           )}
                         </div>
                       </div>
@@ -3078,6 +3057,19 @@ const HorseAnalysisApp = () => {
 
   return (
     <div className="w-full min-h-screen bg-gradient-to-br from-pink-100 via-purple-50 to-blue-100 p-3 md:p-6">
+      {/* Toast通知 */}
+      {toast && (
+        <div className={`fixed top-4 right-4 z-50 px-6 py-4 rounded-2xl shadow-2xl flex items-center gap-3 ${
+          toast.type === 'success' ? 'bg-green-500' :
+          toast.type === 'error' ? 'bg-red-500' :
+          'bg-yellow-500'
+        } text-white font-bold animate-pulse`}>
+          {toast.type === 'success' && '✅'}
+          {toast.type === 'error' && '❌'}
+          {toast.type === 'warning' && '⚠️'}
+          <span>{toast.message}</span>
+        </div>
+      )}
       <div className="max-w-6xl mx-auto">
         <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-3 md:gap-4 mb-6 md:mb-8 bg-white rounded-3xl p-3 md:p-6 shadow-lg border-2 border-pink-200">
           <div className="flex-1 min-w-0 flex items-start gap-2 md:gap-3">
@@ -3108,166 +3100,6 @@ const HorseAnalysisApp = () => {
           </div>
         )}
 
-        {/* オッズ自動取得モーダル */}
-        {showFetchOddsModal && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-            <div className="bg-white rounded-3xl p-6 max-w-xl w-full shadow-2xl max-h-[90vh] overflow-y-auto">
-              <h3 className="text-xl font-bold mb-4 text-gray-800 flex items-center gap-2">
-                <StarPixelArt size={24} />
-                オッズ自動取得
-              </h3>
-
-              <div className="mb-4 flex gap-2">
-                <button
-                  onClick={() => setOddsFetchMode('paste')}
-                  className={`flex-1 px-3 py-2 rounded-full font-bold text-xs ${oddsFetchMode==='paste' ? 'bg-gradient-to-r from-purple-400 to-purple-500 text-white' : 'bg-gray-200 text-gray-800 hover:bg-gray-300'}`}
-                >貼り付け</button>
-                <button
-                  onClick={() => setOddsFetchMode('manual')}
-                  className={`flex-1 px-3 py-2 rounded-full font-bold text-xs ${oddsFetchMode==='manual' ? 'bg-gradient-to-r from-blue-400 to-blue-500 text-white' : 'bg-gray-200 text-gray-800 hover:bg-gray-300'}`}
-                >一括入力</button>
-                <button
-                  onClick={() => setOddsFetchMode('url')}
-                  className={`flex-1 px-3 py-2 rounded-full font-bold text-xs ${oddsFetchMode==='url' ? 'bg-gradient-to-r from-pink-400 to-pink-500 text-white' : 'bg-gray-200 text-gray-800 hover:bg-gray-300'}`}
-                >URL（実験的）</button>
-              </div>
-
-              {oddsFetchMode === 'url' ? (
-                <div className="space-y-3">
-                  <label className="block text-sm font-bold text-gray-700">オッズページのURL（JRA / netkeiba）</label>
-                  <input
-                    type="text"
-                    value={oddsFetchUrl}
-                    onChange={(e) => setOddsFetchUrl(e.target.value)}
-                    placeholder="https://..."
-                    className="w-full px-4 py-3 border-2 border-pink-300 rounded-2xl focus:outline-none focus:border-pink-500"
-                  />
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={showDebugInfo}
-                      onChange={(e) => setShowDebugInfo(e.target.checked)}
-                      className="w-4 h-4 accent-purple-500"
-                    />
-                    <span className="text-xs font-bold text-gray-700">デバッグ情報を表示</span>
-                  </label>
-                  <button
-                    onClick={fetchOddsFromUrl}
-                    disabled={isFetchingOdds}
-                    className={`w-full px-6 py-3 rounded-full font-bold shadow-lg ${isFetchingOdds ? 'bg-gray-300 text-gray-600' : 'bg-gradient-to-r from-pink-400 to-pink-500 text-white hover:shadow-2xl hover:scale-105'} transition`}
-                  >{isFetchingOdds ? '取得中...⏳' : '取得開始'}</button>
-                  
-                  {showDebugInfo && debugHtml && (
-                    <div className="mt-4 p-3 bg-gray-100 rounded-2xl border-2 border-gray-300">
-                      <h4 className="text-sm font-bold text-gray-700 mb-2">取得したHTML（最初の5000文字）</h4>
-                      <pre className="text-xs overflow-auto max-h-40 font-mono bg-white p-2 rounded border">{debugHtml}</pre>
-                    </div>
-                  )}
-                  
-                  {showDebugInfo && debugParsed && (
-                    <div className="mt-4 p-3 bg-gray-100 rounded-2xl border-2 border-gray-300">
-                      <h4 className="text-sm font-bold text-gray-700 mb-2">パース結果</h4>
-                      <pre className="text-xs overflow-auto max-h-40 font-mono bg-white p-2 rounded border">{JSON.stringify(debugParsed, null, 2)}</pre>
-                    </div>
-                  )}
-                </div>
-              ) : oddsFetchMode === 'paste' ? (
-                <div className="space-y-3">
-                  <label className="block text-sm font-bold text-gray-700">オッズ表を貼り付け</label>
-                  <p className="text-xs text-gray-600">
-                    対応形式: 「1 2.3」「1 ウマタロウ 2.3」「1,2.3」など
-                  </p>
-                  <textarea
-                    value={oddsPasteText}
-                    onChange={(e) => setOddsPasteText(e.target.value)}
-                    className="w-full h-40 p-4 border-2 border-purple-300 rounded-2xl font-mono text-sm focus:outline-none focus:border-purple-500"
-                    placeholder="例)\n1 ウマタロウ 2.3\n2 ホースフジ 5.4\nまたは\n1\t2.3\n2\t5.4\nまたは\n1,2.3\n2,5.4"
-                  />
-                  <button
-                    onClick={() => {
-                      const odds = parseOddsFromText(oddsPasteText);
-                      const cleaned = Object.fromEntries(Object.entries(odds).filter(([k,v]) => typeof v === 'number' && v > 0 && v < 1000));
-                      if (Object.keys(cleaned).length === 0) {
-                        setOddsFetchMessage('❌ 解析できませんでした\n対応形式を確認してください');
-                        return;
-                      }
-                      saveOddsWithConfirm(cleaned);
-                    }}
-                    className="w-full px-6 py-3 rounded-full font-bold shadow-lg bg-gradient-to-r from-purple-400 to-purple-500 text-white hover:shadow-2xl hover:scale-105 transition"
-                  >保存する</button>
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  <label className="block text-sm font-bold text-gray-700">馬番ごとにオッズを入力</label>
-                  <div className="max-h-96 overflow-y-auto border-2 border-blue-300 rounded-2xl p-3">
-                    <div className="grid grid-cols-2 gap-2 text-xs font-bold mb-2 pb-2 border-b-2 border-blue-200">
-                      <div>馬番・馬名</div>
-                      <div>単勝オッズ</div>
-                    </div>
-                    {currentRace.horses.sort((a, b) => a.horseNum - b.horseNum).map((horse) => (
-                      <div key={horse.horseNum} className="grid grid-cols-2 gap-2 mb-2">
-                        <div className="flex items-center gap-2">
-                          <span className="font-bold text-blue-600">{horse.horseNum}.</span>
-                          <span className="text-xs truncate">{horse.name}</span>
-                        </div>
-                        <input
-                          type="number"
-                          step="0.1"
-                          value={manualOddsInput[horse.horseNum] || ''}
-                          onChange={(e) => {
-                            const value = e.target.value === '' ? '' : parseFloat(e.target.value);
-                            setManualOddsInput({
-                              ...manualOddsInput,
-                              [horse.horseNum]: value
-                            });
-                          }}
-                          placeholder="2.3"
-                          className="w-full px-2 py-1 border-2 border-blue-300 rounded-lg text-sm focus:outline-none focus:border-blue-500"
-                        />
-                      </div>
-                    ))}
-                  </div>
-                  <button
-                    onClick={() => {
-                      const cleaned = Object.fromEntries(
-                        Object.entries(manualOddsInput).filter(([k, v]) => {
-                          const num = parseInt(k, 10);
-                          const odds = typeof v === 'number' ? v : parseFloat(v);
-                          return !isNaN(odds) && odds > 0 && odds < 1000 && currentRace.horses.some(h => h.horseNum === num);
-                        })
-                      );
-                      if (Object.keys(cleaned).length === 0) {
-                        setOddsFetchMessage('❌ オッズを入力してください');
-                        return;
-                      }
-                      // 数値に変換
-                      const finalOdds = Object.fromEntries(
-                        Object.entries(cleaned).map(([k, v]) => [k, typeof v === 'number' ? v : parseFloat(v)])
-                      );
-                      saveOddsWithConfirm(finalOdds);
-                    }}
-                    className="w-full px-6 py-3 rounded-full font-bold shadow-lg bg-gradient-to-r from-blue-400 to-blue-500 text-white hover:shadow-2xl hover:scale-105 transition"
-                  >保存する</button>
-                </div>
-              )}
-
-              {oddsFetchMessage && (
-                <div className={`mt-4 p-3 rounded-2xl text-sm font-bold border-2 ${
-                  oddsFetchMessage.startsWith('✅') ? 'bg-green-100 border-green-400 text-green-800' : 'bg-red-100 border-red-400 text-red-800'
-                }`}>
-                  <div className="whitespace-pre-line text-left">{oddsFetchMessage}</div>
-                </div>
-              )}
-
-              <div className="mt-6 flex gap-4">
-                <button
-                  onClick={() => setShowFetchOddsModal(false)}
-                  className="flex-1 px-6 py-3 bg-gray-300 text-gray-800 rounded-full font-bold hover:bg-gray-400 transition"
-                >閉じる</button>
-              </div>
-            </div>
-          </div>
-        )}
         <div className="bg-white rounded-3xl p-3 md:p-6 shadow-lg mb-4 md:mb-6 border-2 border-pink-200">
           <h2 className="text-base md:text-xl font-bold text-gray-700 mb-3 md:mb-4 flex items-center gap-2">
             <StarPixelArt size={20} />
@@ -3336,6 +3168,16 @@ const HorseAnalysisApp = () => {
                     <span className="hidden md:inline">オッズ</span>
                     <span className="md:hidden">odds</span>
                   </button>
+                  {isAdmin && (
+                    <button
+                      onClick={openJraVanModal}
+                      className="flex-1 md:flex-none px-3 py-1.5 md:py-2 bg-gradient-to-r from-blue-400 to-blue-500 text-white rounded-full font-bold text-xs shadow-lg hover:shadow-2xl hover:scale-105 transition transform whitespace-nowrap flex items-center justify-center gap-1"
+                    >
+                      <span className={`${isUpdatingOdds ? 'animate-spin' : ''}`}>🔄</span>
+                      <span className="hidden md:inline">自動更新</span>
+                      <span className="md:hidden">自動</span>
+                    </button>
+                  )}
                   <button
                     onClick={() => setShowResultModal(true)}
                     className="flex-1 md:flex-none px-3 py-1.5 md:py-2 bg-gradient-to-r from-green-400 to-green-500 text-white rounded-full font-bold text-xs shadow-lg hover:shadow-2xl hover:scale-105 transition transform whitespace-nowrap flex items-center justify-center gap-1"
@@ -3361,26 +3203,6 @@ const HorseAnalysisApp = () => {
               </button>
               <button
                 onClick={() => {
-                  setShowFetchOddsModal(true);
-                  setOddsFetchMode('paste');
-                  setOddsFetchUrl('');
-                  setOddsPasteText('');
-                  setOddsFetchMessage('');
-                  // 既存オッズを一括入力フォームに反映
-                  if (currentRace.odds && Object.keys(currentRace.odds).length > 0) {
-                    setManualOddsInput({ ...currentRace.odds });
-                  } else {
-                    setManualOddsInput({});
-                  }
-                }}
-                className="flex-1 md:flex-none px-3 py-1.5 md:py-2 bg-gradient-to-r from-pink-400 to-purple-500 text-white rounded-full font-bold text-xs shadow-lg hover:shadow-2xl hover:scale-105 transition transform whitespace-nowrap flex items-center justify-center gap-1"
-              >
-                <span>⚡</span>
-                <span className="hidden md:inline">オッズ取得</span>
-                <span className="md:hidden">オッズ</span>
-              </button>
-              <button
-                onClick={() => {
                   setShowVirtualRaceModal(true);
                   setVirtualRaceResults(null);
                 }}
@@ -3391,11 +3213,6 @@ const HorseAnalysisApp = () => {
                 <span className="md:hidden">仮想</span>
               </button>
             </div>
-            {currentRace.oddsUpdatedAt && (
-              <div className="mt-2 text-xs text-gray-600 font-bold">
-                最終更新: {new Date(currentRace.oddsUpdatedAt).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' })}
-              </div>
-            )}
           </div>
 
           <div className="space-y-2">
@@ -3946,6 +3763,184 @@ const HorseAnalysisApp = () => {
                 </button>
                 <button
                   onClick={() => setShowOddsModal(false)}
+                  className="flex-1 px-4 py-3 bg-gray-400 text-white rounded-full font-bold hover:bg-gray-500 transition"
+                >
+                  キャンセル
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* JRA-VAN自動更新設定モーダル */}
+        {showJraVanModal && isAdmin && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+            <div className="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl max-h-[90vh] overflow-y-auto">
+              <h3 className="text-xl font-bold mb-6 text-gray-800 flex items-center gap-2">
+                <span>🔄</span>
+                JRA-VAN自動更新設定
+              </h3>
+
+              {/* 入力項目 */}
+              <div className="space-y-4 mb-6">
+                {/* 競馬場選択 */}
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-2">
+                    競馬場
+                  </label>
+                  <select
+                    value={jraVanConfig.venue}
+                    onChange={(e) => setJraVanConfig({...jraVanConfig, venue: e.target.value, venueCode: JRA_VENUES[e.target.value]?.code || ''})}
+                    className="w-full px-4 py-3 border-2 border-blue-300 rounded-2xl focus:outline-none focus:border-blue-500 text-sm"
+                  >
+                    <option value="">選択してください</option>
+                    {Object.keys(JRA_VENUES).map(venue => (
+                      <option key={venue} value={venue}>{venue}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* レース日 */}
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-2">
+                    レース日
+                  </label>
+                  <input
+                    type="date"
+                    value={jraVanConfig.displayDate || (jraVanConfig.raceDate && jraVanConfig.raceDate.length === 8 
+                      ? `${jraVanConfig.raceDate.slice(0, 4)}-${jraVanConfig.raceDate.slice(4, 6)}-${jraVanConfig.raceDate.slice(6, 8)}`
+                      : new Date().toISOString().split('T')[0])}
+                    onChange={(e) => {
+                      const dateValue = e.target.value.replace(/-/g, '');
+                      setJraVanConfig({
+                        ...jraVanConfig,
+                        raceDate: dateValue,
+                        displayDate: e.target.value
+                      });
+                    }}
+                    className="w-full px-4 py-3 border-2 border-blue-300 rounded-2xl focus:outline-none focus:border-blue-500 text-sm"
+                  />
+                </div>
+
+                {/* レース番号 */}
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-2">
+                    レース番号
+                  </label>
+                  <select
+                    value={jraVanConfig.raceNumber}
+                    onChange={(e) => setJraVanConfig({...jraVanConfig, raceNumber: parseInt(e.target.value)})}
+                    className="w-full px-4 py-3 border-2 border-blue-300 rounded-2xl focus:outline-none focus:border-blue-500 text-sm"
+                  >
+                    {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map(num => (
+                      <option key={num} value={num}>{num}R</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* 自動更新ON/OFF */}
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-3">
+                    自動更新
+                  </label>
+                  <div className="flex items-center gap-4">
+                    <button
+                      onClick={() => setJraVanConfig({...jraVanConfig, enabled: !jraVanConfig.enabled})}
+                      className={`relative inline-flex h-8 w-16 items-center rounded-full transition-colors ${
+                        jraVanConfig.enabled ? 'bg-green-500' : 'bg-gray-400'
+                      }`}
+                    >
+                      <span
+                        className={`inline-block h-6 w-6 transform rounded-full bg-white transition-transform ${
+                          jraVanConfig.enabled ? 'translate-x-9' : 'translate-x-1'
+                        }`}
+                      />
+                    </button>
+                    <span className={`text-sm font-bold ${jraVanConfig.enabled ? 'text-green-600' : 'text-gray-500'}`}>
+                      {jraVanConfig.enabled ? 'ON' : 'OFF'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* 表示情報 */}
+              {currentRace?.jraVanConfig?.lastUpdated && (
+                <div className="mb-6 p-4 bg-gray-50 rounded-2xl space-y-2">
+                  <div className="text-sm">
+                    <span className="font-bold text-gray-700">最終更新時刻: </span>
+                    <span className="text-gray-600">
+                      {new Date(currentRace.jraVanConfig.lastUpdated).toLocaleString('ja-JP')}
+                    </span>
+                  </div>
+                  {currentRace.jraVanConfig.nextUpdateAt && (
+                    <div className="text-sm">
+                      <span className="font-bold text-gray-700">次回更新予定: </span>
+                      <span className="text-gray-600">
+                        {(() => {
+                          const next = new Date(currentRace.jraVanConfig.nextUpdateAt);
+                          const now = new Date();
+                          const diff = Math.round((next - now) / 1000);
+                          if (diff <= 0) return 'すぐに';
+                          if (diff < 60) return `${diff}秒後`;
+                          return `${Math.round(diff / 60)}分後`;
+                        })()}
+                      </span>
+                    </div>
+                  )}
+                  {currentRace.jraVanConfig.updateInterval && (
+                    <div className="text-sm">
+                      <span className="font-bold text-gray-700">現在の更新間隔: </span>
+                      <span className="text-gray-600">
+                        {(() => {
+                          const interval = currentRace.jraVanConfig.updateInterval;
+                          if (interval < 60) return `${interval}秒ごと`;
+                          return `${Math.round(interval / 60)}分ごと`;
+                        })()}
+                      </span>
+                    </div>
+                  )}
+                  <div className="text-sm">
+                    <span className="font-bold text-gray-700">ステータス: </span>
+                    <span className={`font-bold ${
+                      isUpdatingOdds ? 'text-blue-600' :
+                      currentRace.jraVanConfig.error ? 'text-red-600' :
+                      'text-green-600'
+                    }`}>
+                      {isUpdatingOdds ? '更新中🔄' :
+                       currentRace.jraVanConfig.error ? `エラー❌: ${currentRace.jraVanConfig.error}` :
+                       '待機中'}
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              {/* 注意書き */}
+              <div className="mb-6 p-3 bg-yellow-50 border-2 border-yellow-300 rounded-xl">
+                <p className="text-xs text-yellow-800">
+                  ※ 自動更新は発走時刻の10分前から開始されます<br/>
+                  ※ 発走後は自動的に停止します
+                </p>
+              </div>
+
+              {/* ボタン */}
+              <div className="flex gap-4">
+                {currentRace?.jraVanConfig?.enabled && (
+                  <button
+                    onClick={manualUpdateJraVanOdds}
+                    disabled={isUpdatingOdds}
+                    className="flex-1 px-4 py-3 bg-gradient-to-r from-purple-400 to-purple-500 text-white rounded-full font-bold shadow-lg hover:shadow-2xl transition disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {isUpdatingOdds ? '更新中...' : '今すぐ手動更新'}
+                  </button>
+                )}
+                <button
+                  onClick={saveJraVanConfig}
+                  className="flex-1 px-4 py-3 bg-gradient-to-r from-blue-400 to-blue-500 text-white rounded-full font-bold shadow-lg hover:shadow-2xl transition"
+                >
+                  設定を保存
+                </button>
+                <button
+                  onClick={() => setShowJraVanModal(false)}
                   className="flex-1 px-4 py-3 bg-gray-400 text-white rounded-full font-bold hover:bg-gray-500 transition"
                 >
                   キャンセル
