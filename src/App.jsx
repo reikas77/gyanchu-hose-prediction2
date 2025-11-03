@@ -962,30 +962,44 @@ const HorseAnalysisApp = () => {
     const lines = text.trim().split('\n');
     const oddsMap = {};
     
-    lines.forEach(line => {
+    console.log('=== オッズ抽出開始 ===');
+    
+    lines.forEach((line, index) => {
+      // 「編集」という文字列が含まれる行は馬のデータ行
+      if (!line.includes('編集')) return;
+      
       // タブ区切りで分割
       const parts = line.split('\t').map(s => s.trim()).filter(s => s);
       
-      if (parts.length < 3) return;
+      console.log(`行${index}: `, parts);
       
-      // 馬番を探す（最初の数字）
-      const horseNumMatch = parts[0].match(/^\d+$/);
-      if (!horseNumMatch) return;
+      if (parts.length < 2) return;
       
-      const horseNum = parseInt(parts[0]);
+      // 2番目の要素が馬番（1番目は枠番）
+      const horseNum = parseInt(parts[1]);
+      if (isNaN(horseNum)) return;
       
-      // オッズは最後の数値部分
-      const lastPart = parts[parts.length - 1];
-      const oddsMatch = lastPart.match(/[\d.]+$/);
+      // 最後の部分（馬名〜オッズが全部入っている）を取得
+      const dataSection = parts[parts.length - 1];
       
-      if (oddsMatch) {
-        const odds = parseFloat(oddsMatch[0]);
-        if (!isNaN(odds) && odds > 0 && odds < 1000) {
-          oddsMap[horseNum] = odds;
-        }
+      // 最後の数値（小数点含む）を抽出
+      // パターン: 数字.数字 または 数字
+      const matches = dataSection.match(/[\d.]+/g);
+      
+      if (!matches || matches.length === 0) return;
+      
+      // 最後の数値がオッズ
+      const lastNumber = matches[matches.length - 1];
+      const odds = parseFloat(lastNumber);
+      
+      // オッズの妥当性チェック（0.1〜999.9の範囲）
+      if (!isNaN(odds) && odds >= 0.1 && odds < 1000) {
+        oddsMap[horseNum] = odds;
+        console.log(`✅ ${horseNum}番: ${odds}倍`);
       }
     });
     
+    console.log('=== 抽出結果 ===', oddsMap);
     return oddsMap;
   };
 
