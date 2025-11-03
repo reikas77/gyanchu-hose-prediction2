@@ -158,6 +158,46 @@ const app = initializeApp(firebaseConfig);
 const database = getDatabase(app);
 const auth = getAuth(app);
 
+// ═══════════════════════════════════════════
+// 🐎 競馬場コード定義（netkeiba用）
+// ═══════════════════════════════════════════
+
+const VENUE_CODES = {
+  // 中央競馬
+  '札幌': '01',
+  '函館': '02',
+  '福島': '03',
+  '新潟': '04',
+  '東京': '05',
+  '中山': '06',
+  '中京': '07',
+  '京都': '08',
+  '阪神': '09',
+  '小倉': '10',
+  
+  // 地方競馬
+  '門別': '30',
+  '盛岡': '35',
+  '水沢': '36',
+  '浦和': '42',
+  '船橋': '43',
+  '大井': '44',
+  '川崎': '45',
+  '金沢': '46',
+  '笠松': '47',
+  '名古屋': '48',
+  '園田': '50',
+  '姫路': '51',
+  '高知': '54',
+  '佐賀': '55'
+};
+
+// 中央競馬の競馬場リスト
+const CENTRAL_VENUES = ['札幌', '函館', '福島', '新潟', '東京', '中山', '中京', '京都', '阪神', '小倉'];
+
+// 地方競馬の競馬場リスト
+const LOCAL_VENUES = ['門別', '盛岡', '水沢', '浦和', '船橋', '大井', '川崎', '金沢', '笠松', '名古屋', '園田', '姫路', '高知', '佐賀'];
+
 const HorseAnalysisApp = () => {
   // アプリのバージョン
   const APP_VERSION = '3.2.0'; // バグ修正版
@@ -295,6 +335,25 @@ const HorseAnalysisApp = () => {
 
   // 仮想レース視覚化用のstate
   const [showTrackDiagram, setShowTrackDiagram] = useState(false);
+
+  // 🌐 netkeibaオッズ自動取得用のstate
+  const [showNetkeibaModal, setShowNetkeibaModal] = useState(false);
+  const [netkeibaConfig, setNetkeibaConfig] = useState({
+    raceType: 'central', // 'central' or 'local'
+    venue: '東京',
+    venueCode: '05',
+    raceNumber: 1,
+    raceDate: new Date().toISOString().split('T')[0], // YYYY-MM-DD
+    enabled: false
+  });
+  const [isFetchingOdds, setIsFetchingOdds] = useState(false);
+  const [lastFetchedAt, setLastFetchedAt] = useState(null);
+  const [nextFetchAt, setNextFetchAt] = useState(null);
+  const [fetchStatus, setFetchStatus] = useState('待機中'); // '待機中', '取得中', 'エラー'
+  const [fetchError, setFetchError] = useState(null);
+  const [autoUpdateTimer, setAutoUpdateTimer] = useState(null);
+  const [toastMessage, setToastMessage] = useState('');
+  const [toastType, setToastType] = useState('info'); // 'info', 'success', 'error', 'warning'
 
   const factors = [
     { name: '能力値', weight: 15, key: 'タイム指数' },
@@ -1465,6 +1524,318 @@ const HorseAnalysisApp = () => {
     setCurrentRace({ ...currentRace, odds });
   };
 
+  // 🌐 Toast通知を表示
+  const showToast = (message, type = 'info') => {
+    setToastMessage(message);
+    setToastType(type);
+    setTimeout(() => {
+      setToastMessage('');
+    }, 3000);
+  };
+
+  // 🌐 netkeibaからオッズを取得
+  const fetchNetkeibaOdds = async (raceType, venue, raceDate, raceNumber) => {
+    const venueCode = VENUE_CODES[venue];
+    if (!venueCode) {
+      throw new Error('競馬場コードが見つかりません');
+    }
+
+    // レースIDを生成: YYYYMMDDCC0R
+    const dateStr = raceDate.replace(/-/g, ''); // YYYYMMDD
+    const raceId = `${dateStr}${venueCode}0${raceNumber}`;
+
+    // URL構築
+    const baseUrl = raceType === 'central' 
+      ? 'https://race.netkeiba.com' 
+      : 'https://nar.netkeiba.com';
+    const targetUrl = `${baseUrl}/odds/${raceId}.html`;
+
+    // CORSプロキシ経由でアクセス
+    const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(targetUrl)}`;
+
+    try {
+      setIsFetchingOdds(true);
+      setFetchStatus('取得中');
+      showToast('オッズを取得中...', 'info');
+
+      const response = await fetch(proxyUrl, {
+        method: 'GET',
+        headers: {
+          'Accept': 'text/html'
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTPエラー: ${response.status}`);
+      }
+
+      const html = await response.text();
+
+      // HTMLからオッズを抽出
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(html, 'text/html');
+
+      const oddsMapping = {};
+
+      // netkeibaのHTML構造に応じてオッズを抽出
+      // 単勝オッズのセレクターを複数試行
+      let oddsElements = doc.querySelectorAll('.Odds_Odds, .odds, .Odds_OddsTansho, [class*="Odds"], [class*="odds"]');
+      
+      // もし見つからない場合、テーブルから抽出を試みる
+      if (oddsElements.length === 0) {
+        const tableRows = doc.querySelectorAll('table tr, .RaceList tr');
+        tableRows.forEach((row, index) => {
+          const horseNum = index + 1;
+          // オッズを含む可能性のあるセルを探す
+          const cells = row.querySelectorAll('td, th');
+          cells.forEach(cell => {
+            const text = cell.textContent.trim();
+            // オッズ形式（数値.数値）を探す
+            const oddsMatch = text.match(/(\d+\.?\d*)/);
+            if (oddsMatch && parseFloat(oddsMatch[1]) > 0 && parseFloat(oddsMatch[1]) < 1000) {
+              const odds = parseFloat(oddsMatch[1]);
+              if (!oddsMapping[horseNum]) {
+                oddsMapping[horseNum] = odds;
+              }
+            }
+          });
+        });
+      } else {
+        oddsElements.forEach((element, index) => {
+          const horseNumber = index + 1;
+          const oddsText = element.textContent.trim();
+          const odds = parseFloat(oddsText.replace(/[^\d.]/g, ''));
+          
+          if (!isNaN(odds) && odds > 0) {
+            oddsMapping[horseNumber] = odds;
+          }
+        });
+      }
+
+      if (Object.keys(oddsMapping).length === 0) {
+        throw new Error('オッズが取得できませんでした。ページ構造が異なる可能性があります。');
+      }
+
+      setIsFetchingOdds(false);
+      setFetchStatus('待機中');
+      setLastFetchedAt(new Date());
+      showToast(`オッズを取得しました (${Object.keys(oddsMapping).length}頭)`, 'success');
+
+      return oddsMapping;
+
+    } catch (error) {
+      console.error('netkeiba取得エラー:', error);
+      setIsFetchingOdds(false);
+      setFetchStatus('エラー');
+      setFetchError(error.message);
+      
+      let errorMessage = 'オッズの取得に失敗しました';
+      if (error.message.includes('HTTP')) {
+        errorMessage = '接続エラー。3秒後に再試行';
+      } else if (error.message.includes('コード')) {
+        errorMessage = 'レースIDが正しいか確認してください';
+      } else if (error.message.includes('構造')) {
+        errorMessage = 'オッズが公開されていない可能性があります';
+      }
+      
+      showToast(errorMessage, 'error');
+      throw error;
+    }
+  };
+
+  // 🌐 手動でオッズを取得
+  const handleFetchOdds = async () => {
+    if (!currentRace || !currentRace.firebaseId) {
+      showToast('レースが選択されていません', 'error');
+      return;
+    }
+
+    try {
+      const odds = await fetchNetkeibaOdds(
+        netkeibaConfig.raceType,
+        netkeibaConfig.venue,
+        netkeibaConfig.raceDate,
+        netkeibaConfig.raceNumber
+      );
+
+      // 取得したオッズをFirebaseに保存
+      updateRaceOdds(odds);
+      
+      // 設定も保存
+      const raceRef = ref(database, `races/${currentRace.firebaseId}/netkeibaConfig`);
+      set(raceRef, {
+        ...netkeibaConfig,
+        lastFetched: new Date().toISOString(),
+        error: null
+      });
+
+    } catch (error) {
+      // エラーはfetchNetkeibaOdds内で処理済み
+      const raceRef = ref(database, `races/${currentRace.firebaseId}/netkeibaConfig`);
+      set(raceRef, {
+        ...netkeibaConfig,
+        error: error.message
+      });
+    }
+  };
+
+  // 🌐 自動更新間隔を計算
+  const calculateUpdateInterval = (startTime) => {
+    if (!startTime) return 60000; // デフォルト: 1分
+
+    const now = new Date();
+    const start = new Date(startTime);
+    const diffMs = start - now;
+    const diffMinutes = diffMs / (1000 * 60);
+
+    // 発走10分前から自動更新開始
+    if (diffMinutes < -5) {
+      return null; // 発走後は停止
+    } else if (diffMinutes <= 5) {
+      return 30000; // 5分前〜発走: 30秒ごと
+    } else if (diffMinutes <= 10) {
+      return 60000; // 10分前〜5分前: 1分ごと
+    } else {
+      return null; // 10分前より前は更新しない
+    }
+  };
+
+  // 🌐 自動更新を開始/停止
+  const toggleAutoUpdate = async () => {
+    if (!currentRace || !currentRace.firebaseId) {
+      showToast('レースが選択されていません', 'error');
+      return;
+    }
+
+    const newEnabled = !netkeibaConfig.enabled;
+
+    // タイマーをクリア
+    if (autoUpdateTimer) {
+      clearInterval(autoUpdateTimer);
+      setAutoUpdateTimer(null);
+    }
+
+    if (newEnabled) {
+      // 自動更新を開始
+      const startTime = currentRace.startTime || null;
+      
+      // 10分前より前の場合は警告
+      if (startTime) {
+        const now = new Date();
+        const start = new Date(startTime);
+        const diffMinutes = (start - now) / (1000 * 60);
+        if (diffMinutes > 10) {
+          showToast('発走10分前から自動更新を開始します', 'info');
+        }
+      }
+
+      // すぐに1回取得（10分前より前でも実行）
+      try {
+        await handleFetchOdds();
+      } catch (error) {
+        // エラーは無視（取得失敗しても自動更新は継続）
+      }
+
+      // 動的間隔でタイマーを設定
+      const updateWithDynamicInterval = async () => {
+        const startTime = currentRace.startTime || null;
+        const interval = calculateUpdateInterval(startTime);
+        
+        if (interval === null) {
+          // 発走後は停止
+          if (autoUpdateTimer) {
+            clearInterval(autoUpdateTimer);
+            setAutoUpdateTimer(null);
+          }
+          const raceRef = ref(database, `races/${currentRace.firebaseId}/netkeibaConfig`);
+          set(raceRef, {
+            ...netkeibaConfig,
+            enabled: false
+          });
+          setNetkeibaConfig({ ...netkeibaConfig, enabled: false });
+          showToast('発走後に自動更新を停止しました', 'info');
+          return;
+        }
+
+        try {
+          await handleFetchOdds();
+        } catch (error) {
+          // エラーは無視して継続
+        }
+
+        // 次の間隔を計算して再スケジュール
+        const nextInterval = calculateUpdateInterval(startTime);
+        if (nextInterval !== null) {
+          setTimeout(updateWithDynamicInterval, nextInterval);
+          setNextFetchAt(new Date(Date.now() + nextInterval));
+        }
+      };
+
+      // 最初の間隔で開始
+      const initialInterval = calculateUpdateInterval(startTime) || 60000; // デフォルト1分
+      const timer = setTimeout(updateWithDynamicInterval, initialInterval);
+      setAutoUpdateTimer(timer);
+      setNextFetchAt(new Date(Date.now() + initialInterval));
+    }
+
+    // Firebaseに設定を保存
+    const raceRef = ref(database, `races/${currentRace.firebaseId}/netkeibaConfig`);
+    set(raceRef, {
+      ...netkeibaConfig,
+      enabled: newEnabled
+    });
+
+    setNetkeibaConfig({ ...netkeibaConfig, enabled: newEnabled });
+    showToast(newEnabled ? '自動更新を開始しました' : '自動更新を停止しました', 'info');
+  };
+
+  // 🌐 モーダルを開く時に設定を読み込む
+  const handleOpenNetkeibaModal = () => {
+    if (currentRace && currentRace.netkeibaConfig) {
+      setNetkeibaConfig({
+        ...currentRace.netkeibaConfig,
+        raceDate: currentRace.netkeibaConfig.raceDate || new Date().toISOString().split('T')[0]
+      });
+      setLastFetchedAt(currentRace.netkeibaConfig.lastFetched ? new Date(currentRace.netkeibaConfig.lastFetched) : null);
+    } else {
+      // デフォルト設定
+      setNetkeibaConfig({
+        raceType: 'central',
+        venue: '東京',
+        venueCode: '05',
+        raceNumber: 1,
+        raceDate: new Date().toISOString().split('T')[0],
+        enabled: false
+      });
+      setLastFetchedAt(null);
+    }
+    setFetchError(null);
+    setFetchStatus('待機中');
+    setShowNetkeibaModal(true);
+  };
+
+  // 🌐 競馬場が変更された時の処理
+  const handleVenueChange = (venue) => {
+    const venueCode = VENUE_CODES[venue];
+    const raceType = CENTRAL_VENUES.includes(venue) ? 'central' : 'local';
+    setNetkeibaConfig({
+      ...netkeibaConfig,
+      venue,
+      venueCode,
+      raceType
+    });
+  };
+
+  // 🌐 クリーンアップ: タイマーを停止
+  useEffect(() => {
+    return () => {
+      if (autoUpdateTimer) {
+        clearTimeout(autoUpdateTimer);
+        clearInterval(autoUpdateTimer);
+      }
+    };
+  }, [autoUpdateTimer]);
+
   const updateRaceMemo = (newMemo) => {
     const raceRef = ref(database, `races/${currentRace.firebaseId}`);
     set(raceRef, {
@@ -1509,6 +1880,20 @@ const HorseAnalysisApp = () => {
 
     return (
       <div className="w-full min-h-screen bg-gradient-to-br from-pink-100 via-purple-50 to-blue-100 p-3 md:p-6">
+        {/* Toast通知 */}
+        {toastMessage && (
+          <div className="fixed top-4 left-1/2 transform -translate-x-1/2 z-[100] animate-fade-in">
+            <div className={`px-6 py-4 rounded-full font-bold shadow-2xl text-white ${
+              toastType === 'success' ? 'bg-gradient-to-r from-green-400 to-green-500' :
+              toastType === 'error' ? 'bg-gradient-to-r from-red-400 to-red-500' :
+              toastType === 'warning' ? 'bg-gradient-to-r from-yellow-400 to-yellow-500' :
+              'bg-gradient-to-r from-blue-400 to-blue-500'
+            }`}>
+              {toastMessage}
+            </div>
+          </div>
+        )}
+        
         <div className="max-w-4xl mx-auto">
           <div className="flex justify-between items-center mb-6 md:mb-8">
             <div className="text-center flex-1">
@@ -1751,7 +2136,26 @@ const HorseAnalysisApp = () => {
                           <p className="text-xs text-gray-600 mt-1">
                             {race.createdAt} · {race.horses.length}頭
                             {race.courseKey && ` · ${race.courseKey}`}
+                            {race.netkeibaConfig && race.netkeibaConfig.enabled && (
+                              <span className="ml-2 inline-flex items-center gap-1">
+                                <span className="text-blue-600 animate-spin">🌐</span>
+                                <span className="text-blue-600">取得中</span>
+                              </span>
+                            )}
+                            {race.netkeibaConfig && race.netkeibaConfig.lastFetched && !race.netkeibaConfig.enabled && (
+                              <span className="ml-2 text-blue-600">🌐</span>
+                            )}
                           </p>
+                          {race.netkeibaConfig && race.netkeibaConfig.lastFetched && (
+                            <p className="text-xs text-blue-600 mt-1">
+                              最終取得: {new Date(race.netkeibaConfig.lastFetched).toLocaleString('ja-JP', {
+                                month: 'short',
+                                day: 'numeric',
+                                hour: '2-digit',
+                                minute: '2-digit'
+                              })}
+                            </p>
+                          )}
                           {race.startTime && (
                             <p className="text-xs font-bold text-purple-600 mt-1">
                               🕐 {formatStartTime(race.startTime)}
@@ -2698,6 +3102,20 @@ const HorseAnalysisApp = () => {
 
   return (
     <div className="w-full min-h-screen bg-gradient-to-br from-pink-100 via-purple-50 to-blue-100 p-3 md:p-6">
+      {/* Toast通知 */}
+      {toastMessage && (
+        <div className="fixed top-4 left-1/2 transform -translate-x-1/2 z-[100] animate-fade-in">
+          <div className={`px-6 py-4 rounded-full font-bold shadow-2xl text-white ${
+            toastType === 'success' ? 'bg-gradient-to-r from-green-400 to-green-500' :
+            toastType === 'error' ? 'bg-gradient-to-r from-red-400 to-red-500' :
+            toastType === 'warning' ? 'bg-gradient-to-r from-yellow-400 to-yellow-500' :
+            'bg-gradient-to-r from-blue-400 to-blue-500'
+          }`}>
+            {toastMessage}
+          </div>
+        </div>
+      )}
+      
       <div className="max-w-6xl mx-auto">
         <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-3 md:gap-4 mb-6 md:mb-8 bg-white rounded-3xl p-3 md:p-6 shadow-lg border-2 border-pink-200">
           <div className="flex-1 min-w-0 flex items-start gap-2 md:gap-3">
@@ -2795,6 +3213,14 @@ const HorseAnalysisApp = () => {
                     <StarPixelArt size={14} />
                     <span className="hidden md:inline">オッズ</span>
                     <span className="md:hidden">odds</span>
+                  </button>
+                  <button
+                    onClick={handleOpenNetkeibaModal}
+                    className="flex-1 md:flex-none px-3 py-1.5 md:py-2 bg-gradient-to-r from-blue-400 to-cyan-500 text-white rounded-full font-bold text-xs shadow-lg hover:shadow-2xl hover:scale-105 transition transform whitespace-nowrap flex items-center justify-center gap-1"
+                  >
+                    <span className="text-sm">🌐</span>
+                    <span className="hidden md:inline">取得</span>
+                    <span className="md:hidden">取得</span>
                   </button>
                   <button
                     onClick={() => setShowResultModal(true)}
@@ -3340,6 +3766,162 @@ const HorseAnalysisApp = () => {
                   キャンセル
                 </button>
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* 🌐 netkeibaオッズ自動取得モーダル */}
+        {showNetkeibaModal && isAdmin && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+            <div className="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl">
+              <h3 className="text-xl font-bold mb-6 text-gray-800 flex items-center gap-2">
+                <span className="text-2xl">🌐</span>
+                オッズ自動取得
+              </h3>
+              
+              <div className="space-y-4 mb-6">
+                {/* 競馬種別 */}
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-2">
+                    競馬種別
+                  </label>
+                  <select
+                    value={netkeibaConfig.raceType}
+                    onChange={(e) => {
+                      const newType = e.target.value;
+                      const defaultVenue = newType === 'central' ? CENTRAL_VENUES[0] : LOCAL_VENUES[0];
+                      handleVenueChange(defaultVenue);
+                    }}
+                    className="w-full px-4 py-2 border-2 border-purple-300 rounded-2xl focus:outline-none focus:border-purple-500 font-bold"
+                  >
+                    <option value="central">中央競馬</option>
+                    <option value="local">地方競馬</option>
+                  </select>
+                </div>
+
+                {/* 競馬場 */}
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-2">
+                    競馬場
+                  </label>
+                  <select
+                    value={netkeibaConfig.venue}
+                    onChange={(e) => handleVenueChange(e.target.value)}
+                    className="w-full px-4 py-2 border-2 border-purple-300 rounded-2xl focus:outline-none focus:border-purple-500 font-bold"
+                  >
+                    {(netkeibaConfig.raceType === 'central' ? CENTRAL_VENUES : LOCAL_VENUES).map(venue => (
+                      <option key={venue} value={venue}>{venue}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* レース日 */}
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-2">
+                    レース日
+                  </label>
+                  <input
+                    type="date"
+                    value={netkeibaConfig.raceDate}
+                    onChange={(e) => setNetkeibaConfig({ ...netkeibaConfig, raceDate: e.target.value })}
+                    className="w-full px-4 py-2 border-2 border-purple-300 rounded-2xl focus:outline-none focus:border-purple-500 font-bold"
+                  />
+                </div>
+
+                {/* レース番号 */}
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-2">
+                    レース番号
+                  </label>
+                  <select
+                    value={netkeibaConfig.raceNumber}
+                    onChange={(e) => setNetkeibaConfig({ ...netkeibaConfig, raceNumber: parseInt(e.target.value) })}
+                    className="w-full px-4 py-2 border-2 border-purple-300 rounded-2xl focus:outline-none focus:border-purple-500 font-bold"
+                  >
+                    {Array.from({ length: 12 }, (_, i) => i + 1).map(num => (
+                      <option key={num} value={num}>{num}R</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* ステータス表示 */}
+              <div className="mb-6 p-4 bg-gray-100 rounded-2xl">
+                <div className="space-y-2 text-sm">
+                  {lastFetchedAt && (
+                    <div className="flex justify-between">
+                      <span className="font-bold text-gray-700">最終取得:</span>
+                      <span className="text-gray-600">
+                        {lastFetchedAt.toLocaleString('ja-JP')}
+                      </span>
+                    </div>
+                  )}
+                  {nextFetchAt && netkeibaConfig.enabled && (
+                    <div className="flex justify-between">
+                      <span className="font-bold text-gray-700">次回更新:</span>
+                      <span className="text-gray-600">
+                        {Math.max(0, Math.floor((nextFetchAt - new Date()) / 1000))}秒後
+                      </span>
+                    </div>
+                  )}
+                  <div className="flex justify-between">
+                    <span className="font-bold text-gray-700">ステータス:</span>
+                    <span className={`font-bold ${
+                      fetchStatus === '取得中' ? 'text-blue-600' :
+                      fetchStatus === 'エラー' ? 'text-red-600' :
+                      'text-gray-600'
+                    }`}>
+                      {fetchStatus === '取得中' ? '🔄 取得中...' :
+                       fetchStatus === 'エラー' ? '❌ エラー' :
+                       '⚪ 待機中'}
+                    </span>
+                  </div>
+                  {fetchError && (
+                    <div className="mt-2 text-xs text-red-600">
+                      {fetchError}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* ボタン */}
+              <div className="flex gap-4">
+                <button
+                  onClick={handleFetchOdds}
+                  disabled={isFetchingOdds}
+                  className="flex-1 px-4 py-3 bg-gradient-to-r from-blue-400 to-cyan-500 text-white rounded-full font-bold shadow-lg hover:shadow-2xl transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                >
+                  {isFetchingOdds ? (
+                    <>
+                      <span className="animate-spin">🔄</span>
+                      <span>取得中...</span>
+                    </>
+                  ) : (
+                    <>
+                      <span>🌐</span>
+                      <span>今すぐ取得</span>
+                    </>
+                  )}
+                </button>
+                <button
+                  onClick={toggleAutoUpdate}
+                  className={`flex-1 px-4 py-3 rounded-full font-bold shadow-lg hover:shadow-2xl transition flex items-center justify-center gap-2 ${
+                    netkeibaConfig.enabled
+                      ? 'bg-gradient-to-r from-green-400 to-green-500 text-white'
+                      : 'bg-gradient-to-r from-gray-400 to-gray-500 text-white'
+                  }`}
+                >
+                  <span>{netkeibaConfig.enabled ? '⏸️' : '▶️'}</span>
+                  <span>{netkeibaConfig.enabled ? '自動更新OFF' : '自動更新ON'}</span>
+                </button>
+              </div>
+
+              <button
+                onClick={() => setShowNetkeibaModal(false)}
+                className="w-full mt-4 px-4 py-3 bg-gray-400 text-white rounded-full font-bold hover:bg-gray-500 transition"
+              >
+                閉じる
+              </button>
             </div>
           </div>
         )}
