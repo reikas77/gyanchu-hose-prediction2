@@ -1262,21 +1262,28 @@ const HorseAnalysisApp = () => {
       console.log('===== URL取得開始 =====');
       console.log('入力URL:', oddsFetchUrl);
       
-      const proxied = `https://api.allorigins.win/raw?url=${encodeURIComponent(oddsFetchUrl)}`;
-      console.log('プロキシURL:', proxied);
-      
-      const res = await fetch(proxied, { method: 'GET' });
+      // URL正規化（narの出馬表→オッズに置き換え）
+      let targetUrl = oddsFetchUrl.trim();
+      if (/nar\.netkeiba\.com/.test(targetUrl) && /shutuba\.html/.test(targetUrl)) {
+        targetUrl = targetUrl.replace('shutuba.html', 'odds.html');
+        console.log('URLをオッズページへ補正:', targetUrl);
+      }
+
+      // まずは AllOrigins 経由で取得（UTF-8系/JRA想定）
+      let proxied = `https://api.allorigins.win/raw?url=${encodeURIComponent(targetUrl)}`;
+      console.log('一次プロキシURL (AllOrigins):', proxied);
+      let res = await fetch(proxied, { method: 'GET' });
       if (!res.ok) {
         throw new Error(`HTTP ${res.status}: ${res.statusText}`);
       }
       
-      const html = await res.text();
-      console.log('取得HTMLサイズ:', html.length, '文字');
+      let html = await res.text();
+      console.log('取得HTMLサイズ(一次):', html.length, '文字');
       
       // デバッグ用にHTMLを保存（常に保存して、チェックボックスで表示制御）
       setDebugHtml(html.substring(0, 5000)); // 最初の5000文字
       
-      const odds = parseOddsFromHtml(html, oddsFetchUrl);
+      let odds = parseOddsFromHtml(html, targetUrl);
       console.log('パース後のデータ:', odds);
       
       // デバッグ用にパース結果を保存（常に保存して、チェックボックスで表示制御）
@@ -1295,18 +1302,39 @@ const HorseAnalysisApp = () => {
       
       console.log('クリーニング後のデータ:', cleaned);
       console.log('取得できた頭数:', Object.keys(cleaned).length);
-      
-      if (Object.keys(cleaned).length === 0) {
+      // 0件の場合は nar(EUC-JP) 向けに r.jina.ai で再取得して再パース
+      if (Object.keys(cleaned).length === 0 && /nar\.netkeiba\.com/.test(targetUrl)) {
+        const jinaUrl = `https://r.jina.ai/http://${targetUrl.replace(/^https?:\/\//, '')}`;
+        console.log('二次プロキシURL (r.jina.ai):', jinaUrl);
+        res = await fetch(jinaUrl, { method: 'GET' });
+        if (res.ok) {
+          html = await res.text();
+          console.log('取得HTMLサイズ(二次):', html.length, '文字');
+          setDebugHtml(html.substring(0, 5000));
+          odds = parseOddsFromHtml(html, targetUrl);
+          setDebugParsed(odds);
+          const cleaned2 = Object.fromEntries(
+            Object.entries(odds).filter(([k, v]) => typeof v === 'number' && !isNaN(v) && v > 0 && v < 1000)
+          );
+          console.log('クリーニング後のデータ(二次):', cleaned2);
+          if (Object.keys(cleaned2).length > 0) {
+            saveOddsWithConfirm(cleaned2);
+            return;
+          }
+        }
+      }
+
+      if (Object.keys(cleaned).length > 0) {
+        saveOddsWithConfirm(cleaned);
+      } else {
         const errorMsg = '❌ 取得できませんでした。\n' +
-          '・URLが正しいオッズページか確認してください\n' +
+          '・URLが正しいオッズページか確認してください（出馬表→odds.html）\n' +
           '・「貼り付け」タブで手動入力してください\n' +
           '・デバッグ情報を表示して確認してください';
         setOddsFetchMessage(errorMsg);
         setIsFetchingOdds(false);
         return;
       }
-      
-      saveOddsWithConfirm(cleaned);
     } catch (e) {
       console.error('❌ 取得エラー:', e);
       const errorMsg = `❌ 取得失敗：${e.message}\n` +
