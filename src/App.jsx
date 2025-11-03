@@ -1551,17 +1551,15 @@ const HorseAnalysisApp = () => {
     const targetUrl = `${baseUrl}/odds/${raceId}.html`;
 
     // CORSプロキシ経由でアクセス
-    const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(targetUrl)}`;
-
-    try {
-      setIsFetchingOdds(true);
-      setFetchStatus('取得中');
-      showToast('オッズを取得中...', 'info');
-
-      const response = await fetch(proxyUrl, {
+    // allorigins.winは2つのエンドポイントがある:
+    // 1. /raw?url= - 直接HTMLを返す（但しJSON形式の可能性もある）
+    // 2. /get?url= - JSON形式で返す {contents: "HTML..."}
+    
+    const tryGetHtml = async (url) => {
+      const response = await fetch(url, {
         method: 'GET',
         headers: {
-          'Accept': 'text/html'
+          'Accept': 'application/json, text/html, */*'
         }
       });
 
@@ -1569,7 +1567,119 @@ const HorseAnalysisApp = () => {
         throw new Error(`HTTPエラー: ${response.status}`);
       }
 
-      const html = await response.text();
+      const contentType = response.headers.get('content-type') || '';
+      
+      // JSON形式の場合
+      if (contentType.includes('application/json')) {
+        const jsonData = await response.json();
+        // allorigins.winのJSON形式: {contents: "HTML..."}
+        return jsonData.contents || jsonData.content || '';
+      } 
+      // テキスト形式の場合
+      else {
+        const text = await response.text();
+        // テキストがJSON形式の文字列の場合もある
+        if (text.trim().startsWith('{')) {
+          try {
+            const jsonData = JSON.parse(text);
+            return jsonData.contents || jsonData.content || text;
+          } catch {
+            return text;
+          }
+        }
+        return text;
+      }
+    };
+
+    try {
+      setIsFetchingOdds(true);
+      setFetchStatus('取得中');
+      showToast('オッズを取得中...', 'info');
+
+      let html = '';
+      
+      // まず /raw?url= を試す
+      try {
+        const rawProxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(targetUrl)}`;
+        html = await tryGetHtml(rawProxyUrl);
+        console.log('raw エンドポイントで取得:', html.length > 0 ? '成功' : '失敗');
+      } catch (rawError) {
+        console.warn('raw エンドポイント失敗:', rawError);
+      }
+      
+      // 空の場合は /get?url= を試す
+      if (!html || html.trim().length === 0) {
+        try {
+          const getProxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(targetUrl)}`;
+          const jsonResponse = await fetch(getProxyUrl);
+          if (jsonResponse.ok) {
+            const jsonData = await jsonResponse.json();
+            html = jsonData.contents || jsonData.content || '';
+            console.log('get エンドポイントで取得:', html.length > 0 ? '成功' : '失敗');
+          }
+        } catch (getError) {
+          console.warn('get エンドポイント失敗:', getError);
+        }
+      }
+      
+      // レスポンスが空の場合、代替プロキシを試す
+      if (!html || html.trim().length === 0) {
+        console.warn('最初のプロキシでHTMLが取得できませんでした。代替プロキシを試します...');
+        const alternativeProxyUrl = `https://cors-anywhere.herokuapp.com/${targetUrl}`;
+        try {
+          const altResponse = await fetch(alternativeProxyUrl, {
+            method: 'GET',
+            headers: {
+              'Accept': 'text/html'
+            }
+          });
+          if (altResponse.ok) {
+            html = await altResponse.text();
+          }
+        } catch (altError) {
+          console.warn('代替プロキシ1も失敗:', altError);
+        }
+      }
+      
+      // それでも空の場合、別のプロキシを試す
+      if (!html || html.trim().length === 0) {
+        console.warn('代替プロキシ1でもHTMLが取得できませんでした。別のプロキシを試します...');
+        const proxyUrl2 = `https://thingproxy.freeboard.io/fetch/${targetUrl}`;
+        try {
+          const altResponse2 = await fetch(proxyUrl2, {
+            method: 'GET',
+            headers: {
+              'Accept': 'text/html'
+            }
+          });
+          if (altResponse2.ok) {
+            html = await altResponse2.text();
+          }
+        } catch (altError2) {
+          console.warn('代替プロキシ2も失敗:', altError2);
+        }
+      }
+      
+      // HTMLが取得できたか確認
+      if (!html || html.trim().length === 0) {
+        console.error('すべてのプロキシでHTMLが取得できませんでした。');
+        console.error('レスポンス詳細:', {
+          status: response.status,
+          statusText: response.statusText,
+          headers: Object.fromEntries(response.headers.entries()),
+          url: proxyUrl
+        });
+        throw new Error('HTMLが取得できませんでした。CORSプロキシの問題の可能性があります。');
+      }
+      
+      // HTMLの内容を確認（エラーページでないか）
+      if (html.includes('Access Denied') || html.includes('403') || html.includes('Forbidden')) {
+        throw new Error('アクセスが拒否されました。プロキシが制限されている可能性があります。');
+      }
+      
+      if (html.includes('404') || html.includes('Not Found')) {
+        throw new Error('レースページが見つかりませんでした。レースIDが正しいか確認してください。');
+      }
 
       // HTMLからオッズを抽出
       const parser = new DOMParser();
@@ -1825,20 +1935,43 @@ const HorseAnalysisApp = () => {
           hasOddsClass: doc.querySelectorAll('[class*="Odds"], [class*="odds"]').length,
           hasTable: doc.querySelectorAll('table').length,
           tableCount: doc.querySelectorAll('table').length,
-          url: targetUrl
+          url: targetUrl,
+          htmlLength: html.length,
+          hasBody: !!doc.querySelector('body'),
+          bodyTextLength: doc.querySelector('body')?.textContent?.length || 0
         };
         
         console.error('オッズ抽出失敗。デバッグ情報:', debugInfo);
-        console.error('HTMLプレビュー:', html.substring(0, 2000));
         
-        // HTML内の主要なクラス名をリストアップ
-        const allClasses = [];
-        doc.querySelectorAll('[class]').forEach(el => {
-          const classes = el.className.split(' ').filter(c => c);
-          allClasses.push(...classes);
-        });
-        const uniqueClasses = [...new Set(allClasses)];
-        console.error('検出されたクラス名（最初の20個）:', uniqueClasses.slice(0, 20));
+        // HTMLが存在する場合のみプレビューを表示
+        if (html && html.length > 0) {
+          console.error('HTMLプレビュー（最初の2000文字）:', html.substring(0, 2000));
+          
+          // HTML内の主要なクラス名をリストアップ
+          const allClasses = [];
+          doc.querySelectorAll('[class]').forEach(el => {
+            const classes = el.className.split(' ').filter(c => c);
+            allClasses.push(...classes);
+          });
+          const uniqueClasses = [...new Set(allClasses)];
+          console.error('検出されたクラス名（最初の20個）:', uniqueClasses.slice(0, 20));
+          
+          // テーブル構造を確認
+          const tables = doc.querySelectorAll('table');
+          console.error(`テーブル数: ${tables.length}`);
+          if (tables.length > 0) {
+            tables.forEach((table, idx) => {
+              console.error(`テーブル${idx + 1}の内容:`, table.textContent.substring(0, 200));
+            });
+          }
+          
+          // オッズらしき数値パターンを全て抽出して表示
+          const allNumbers = html.matchAll(/(\d+\.\d+)/g);
+          const numbers = Array.from(allNumbers).map(m => parseFloat(m[1])).filter(n => n > 0 && n < 1000);
+          console.error('検出された数値パターン（オッズ候補）:', numbers.slice(0, 20));
+        } else {
+          console.error('HTMLが空です。プロキシが正しく動作していない可能性があります。');
+        }
         
         throw new Error('オッズが取得できませんでした。ページ構造が異なる可能性があります。ブラウザのコンソール（F12）で詳細を確認してください。');
       }
