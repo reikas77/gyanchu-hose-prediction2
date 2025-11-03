@@ -3770,17 +3770,17 @@ const HorseAnalysisApp = () => {
                                   {/* 馬のボックス */}
                                   <div
                                     className={`relative ${getHorseColor(horse.horseNum)} rounded-lg px-2 py-1 shadow-lg border-2 border-white ${
-                                      horse.isTopTenki ? 'ring-4 ring-yellow-400 ring-opacity-75 animate-pulse pt-4' : ''
+                                      horse.isTopTenki ? 'ring-4 ring-yellow-400 ring-opacity-75 animate-pulse' : ''
                                     }`}
                                     style={{
                                       minWidth: '50px'
                                     }}
                                   >
-                                    <div className="text-white font-bold text-sm text-center">
+                                    <div className="text-white font-bold text-sm leading-none text-center">
                                       {horse.horseNum}
                                     </div>
                                     {horse.isTopTenki && (
-                                      <div className="absolute -top-4 left-1/2 -translate-x-1/2 text-yellow-300 text-lg animate-pulse z-10">
+                                      <div className="absolute -top-4 left-1/2 -translate-x-1/2 text-yellow-300 text-lg animate-pulse z-10 pointer-events-none">
                                         ★
                                       </div>
                                     )}
@@ -3791,7 +3791,7 @@ const HorseAnalysisApp = () => {
                           ))}
 
                           {/* 凡例 */}
-                          <div className="absolute bottom-0 left-0 right-0 p-4 bg-black bg-opacity-50 rounded-b-2xl">
+                          <div className="absolute bottom-0 left-0 right-0 p-4 bg-black bg-opacity-50 rounded-b-2xl z-20 pointer-events-none">
                             <div className="text-white text-xs font-bold mb-2">
                               {topTenkiHorse && `★ = 最も展開利のある馬`}
                             </div>
