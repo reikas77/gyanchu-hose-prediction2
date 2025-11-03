@@ -962,44 +962,35 @@ const HorseAnalysisApp = () => {
     const lines = text.trim().split('\n');
     const oddsMap = {};
     
-    console.log('=== オッズ抽出開始 ===');
-    
-    lines.forEach((line, index) => {
-      // 「編集」という文字列が含まれる行は馬のデータ行
-      if (!line.includes('編集')) return;
+    lines.forEach((line) => {
+      // タブで分割
+      const parts = line.split('\t');
       
-      // タブ区切りで分割
-      const parts = line.split('\t').map(s => s.trim()).filter(s => s);
-      
-      console.log(`行${index}: `, parts);
-      
-      if (parts.length < 2) return;
-      
-      // 2番目の要素が馬番（1番目は枠番）
-      const horseNum = parseInt(parts[1]);
-      if (isNaN(horseNum)) return;
-      
-      // 最後の部分（馬名〜オッズが全部入っている）を取得
-      const dataSection = parts[parts.length - 1];
-      
-      // 最後の数値（小数点含む）を抽出
-      // パターン: 数字.数字 または 数字
-      const matches = dataSection.match(/[\d.]+/g);
-      
-      if (!matches || matches.length === 0) return;
-      
-      // 最後の数値がオッズ
-      const lastNumber = matches[matches.length - 1];
-      const odds = parseFloat(lastNumber);
-      
-      // オッズの妥当性チェック（0.1〜999.9の範囲）
-      if (!isNaN(odds) && odds >= 0.1 && odds < 1000) {
-        oddsMap[horseNum] = odds;
-        console.log(`✅ ${horseNum}番: ${odds}倍`);
+      // 最初の2つの要素が数字の行を探す（枠番と馬番）
+      if (parts.length >= 2) {
+        const wakuban = parts[0].trim();
+        const umaban = parts[1].trim();
+        
+        // 両方が数字の場合のみ処理
+        if (/^\d+$/.test(wakuban) && /^\d+$/.test(umaban)) {
+          const horseNum = parseInt(umaban);
+          
+          // その行全体から小数点を含む数値を全て抽出
+          const allNumbers = line.match(/\d+\.\d+|\d+/g);
+          
+          if (allNumbers && allNumbers.length > 0) {
+            // 最後の数値を取得（これがオッズ）
+            const lastNum = parseFloat(allNumbers[allNumbers.length - 1]);
+            
+            // オッズとして妥当な範囲（1.0〜999.9）
+            if (lastNum >= 1.0 && lastNum < 1000) {
+              oddsMap[horseNum] = lastNum;
+            }
+          }
+        }
       }
     });
     
-    console.log('=== 抽出結果 ===', oddsMap);
     return oddsMap;
   };
 
@@ -3405,26 +3396,44 @@ const HorseAnalysisApp = () => {
                   📋 netkeibaから一括貼り付け
                 </label>
                 <textarea
-                  placeholder="netkeibaの出馬表をコピーしてここに貼り付けてください"
+                  id="oddsTextarea"
+                  placeholder="netkeibaの出馬表をコピーしてここに貼り付けてください&#10;&#10;1. netkeibaで全選択（Ctrl+A / Cmd+A）&#10;2. コピー（Ctrl+C / Cmd+C）&#10;3. ここに貼り付け（Ctrl+V / Cmd+V）&#10;4. 下の「オッズを抽出」ボタンをクリック"
                   className="w-full h-32 p-3 border-2 border-blue-300 rounded-xl text-sm focus:outline-none focus:border-blue-500 font-mono"
-                  onPaste={(e) => {
-                    const pastedText = e.clipboardData.getData('text');
-                    const extractedOdds = parseOddsFromNetkeiba(pastedText);
+                />
+                
+                <button
+                  onClick={() => {
+                    const textarea = document.getElementById('oddsTextarea');
+                    const text = textarea.value;
+                    
+                    if (!text.trim()) {
+                      window.alert('❌ テキストが入力されていません');
+                      return;
+                    }
+                    
+                    const extractedOdds = parseOddsFromNetkeiba(text);
                     
                     if (Object.keys(extractedOdds).length > 0) {
                       setOddsInput(extractedOdds);
-                      e.target.value = '';
+                      textarea.value = '';
                       
-                      // 成功メッセージを表示
-                      const message = `✅ ${Object.keys(extractedOdds).length}頭分のオッズを抽出しました！`;
+                      // 抽出したオッズを表示
+                      let message = `✅ ${Object.keys(extractedOdds).length}頭分のオッズを抽出しました！\n\n`;
+                      Object.entries(extractedOdds).forEach(([num, odds]) => {
+                        message += `${num}番: ${odds}倍\n`;
+                      });
                       window.alert(message);
                     } else {
-                      window.alert('❌ オッズを抽出できませんでした。形式を確認してください。');
+                      window.alert('❌ オッズを抽出できませんでした。\n\nnetkeibaの出馬表ページ全体をコピーして貼り付けてください。');
                     }
                   }}
-                />
+                  className="w-full mt-3 px-4 py-2 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-full font-bold shadow-lg hover:shadow-2xl transition"
+                >
+                  🔍 オッズを抽出
+                </button>
+                
                 <p className="text-xs text-gray-600 mt-2">
-                  💡 netkeibaの出馬表ページで全選択（Ctrl+A / Cmd+A）してコピーし、上の欄に貼り付けてください
+                  💡 netkeibaの出馬表ページで全選択（Ctrl+A / Cmd+A）してコピーし、上の欄に貼り付けて「オッズを抽出」ボタンを押してください
                 </p>
               </div>
 
@@ -3433,7 +3442,7 @@ const HorseAnalysisApp = () => {
                 <label className="block text-sm font-bold text-gray-700 mb-3">
                   ✏️ 個別に編集
                 </label>
-                <div className="space-y-3">
+                <div className="space-y-3 max-h-64 overflow-y-auto">
                   {currentRace.horses.sort((a, b) => a.horseNum - b.horseNum).map((horse) => (
                     <div key={horse.horseNum} className="flex items-center gap-3">
                       <label className="text-xs font-bold text-gray-700 w-32 truncate">
@@ -3463,7 +3472,10 @@ const HorseAnalysisApp = () => {
                   保存
                 </button>
                 <button
-                  onClick={() => setShowOddsModal(false)}
+                  onClick={() => {
+                    setShowOddsModal(false);
+                    document.getElementById('oddsTextarea').value = '';
+                  }}
                   className="flex-1 px-4 py-3 bg-gray-400 text-white rounded-full font-bold hover:bg-gray-500 transition"
                 >
                   キャンセル
