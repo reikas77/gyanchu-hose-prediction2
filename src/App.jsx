@@ -265,6 +265,8 @@ const HorseAnalysisApp = () => {
   // 新機能用のstate
   const [raceConfidence, setRaceConfidence] = useState(3);
   const [raceStartTime, setRaceStartTime] = useState('');
+  const [netkeibaRaceId, setNetkeibaRaceId] = useState('');
+  const [autoUpdateOdds, setAutoUpdateOdds] = useState(false);
   const [showRenameModal, setShowRenameModal] = useState(false);
   const [editingRaceId, setEditingRaceId] = useState(null);
   const [newRaceName, setNewRaceName] = useState('');
@@ -709,18 +711,37 @@ const HorseAnalysisApp = () => {
       passcode: racePasscode || null,
       confidence: raceConfidence || 3,
       startTime: raceStartTime || null,
-      viewCount: 0
+      viewCount: 0,
+      netkeibaRaceId: netkeibaRaceId || null,
+      autoUpdateOdds: autoUpdateOdds || false
     };
-
-    const racesRef = ref(database, 'races');
-    push(racesRef, newRace);
+    
+    // NetkeibaレースIDが設定されている場合、マッピングを保存
+    if (netkeibaRaceId) {
+      const racesRef = ref(database, 'races');
+      push(racesRef, newRace).then((raceRef) => {
+        const firebaseId = raceRef.key;
+        const mappingRef = ref(database, `raceMappings/${firebaseId}`);
+        set(mappingRef, {
+          netkeibaRaceId: netkeibaRaceId,
+          firebaseRaceId: firebaseId,
+          raceName: raceName,
+          createdAt: new Date().toISOString()
+        });
+      });
+    } else {
+      const racesRef = ref(database, 'races');
+      push(racesRef, newRace);
+    }
 
     setPasteText('');
     setRaceName('');
     setRacePasscode('');
+    setNetkeibaRaceId('');
+    setAutoUpdateOdds(false);
     setManualHorses([]);
     setInputMode('paste');
-    setImportMessage(`${raceName}を追加しました！（${horses.length}頭）${racePasscode ? ' 🔒パスコード設定済み' : ''}`);
+    setImportMessage(`${raceName}を追加しました！（${horses.length}頭）${racePasscode ? ' 🔒パスコード設定済み' : ''}${netkeibaRaceId ? ' 📊オッズ自動更新有効' : ''}`);
     setImportMessageType('success');
     setTimeout(() => {
       setImportMessage('');
@@ -828,6 +849,8 @@ const HorseAnalysisApp = () => {
       setOddsInput(selectedLockedRace.odds || {});
       setExcludedHorses(selectedLockedRace.excluded || {});
       setExpCoefficient(selectedLockedRace.expCoefficient || 0.1);
+      setNetkeibaRaceId(selectedLockedRace.netkeibaRaceId || '');
+      setAutoUpdateOdds(selectedLockedRace.autoUpdateOdds || false);
       
       setShowPasscodeModal(false);
       setPasscodeInput('');
@@ -867,6 +890,8 @@ const HorseAnalysisApp = () => {
       setExcludedHorses(race.excluded || {});
       setExpCoefficient(race.expCoefficient || 0.1);
       setHorseMarks(race.horseMarks || {});
+      setNetkeibaRaceId(race.netkeibaRaceId || '');
+      setAutoUpdateOdds(race.autoUpdateOdds || false);
       
       // 👁️ 閲覧数をカウント
       incrementViewCount(race.firebaseId);
@@ -2177,6 +2202,42 @@ const HorseAnalysisApp = () => {
                 
                 <div className="mb-4 md:mb-6">
                   <label className="block text-sm font-bold text-gray-700 mb-2 flex items-center gap-2">
+                    📊 NetkeibaレースID（オッズ自動更新用）
+                    <span className="text-xs text-gray-500 font-normal">※オプション</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={netkeibaRaceId}
+                    onChange={(e) => setNetkeibaRaceId(e.target.value.replace(/\D/g, ''))}
+                    placeholder="例：202506010301（NetkeibaのレースURLから取得）"
+                    className="w-full px-4 py-3 border-2 border-blue-300 rounded-2xl focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200 text-sm md:text-base"
+                  />
+                  <p className="text-xs text-gray-600 mt-2">
+                    NetkeibaのレースページURLから取得できます（例: /race/202506010301/ → 202506010301）
+                  </p>
+                </div>
+                
+                {netkeibaRaceId && (
+                  <div className="mb-4 md:mb-6">
+                    <label className="flex items-center gap-3 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={autoUpdateOdds}
+                        onChange={(e) => setAutoUpdateOdds(e.target.checked)}
+                        className="w-5 h-5 accent-blue-500"
+                      />
+                      <span className="text-sm font-bold text-gray-700">
+                        🔄 オッズ自動更新を有効にする（発走1時間前から3分ごとに更新）
+                      </span>
+                    </label>
+                    <p className="text-xs text-gray-600 mt-2 ml-8">
+                      スクレイパーが実行されている場合、自動的にオッズが更新されます
+                    </p>
+                  </div>
+                )}
+                
+                <div className="mb-4 md:mb-6">
+                  <label className="block text-sm font-bold text-gray-700 mb-2 flex items-center gap-2">
                     <LockPixelArt size={20} />
                     パスコード（オプション）
                     <span className="text-xs text-gray-500 font-normal">※6桁の数字</span>
@@ -2318,10 +2379,13 @@ const HorseAnalysisApp = () => {
                       setPasteText('');
                       setRaceName('');
                       setRacePasscode('');
+                      setNetkeibaRaceId('');
+                      setAutoUpdateOdds(false);
                       setManualHorses([]);
                       setInputMode('paste');
                       setImportMessage('');
                       setSelectedCourse(null);
+                      setRaceStartTime('');
                     }}
                     className="flex-1 px-6 py-3 bg-gray-300 text-gray-800 rounded-full font-bold hover:bg-gray-400 transition"
                   >
@@ -2710,6 +2774,16 @@ const HorseAnalysisApp = () => {
                 {currentRace.createdAt} · {currentRace.horses.length}頭
                 {raceSelectedCourse && ` · ${raceSelectedCourse}`}
                 {isAdmin && ` · EXP係数: ${expCoefficient}`}
+                {currentRace.autoUpdateOdds && currentRace.netkeibaRaceId && (
+                  <span className="ml-2 px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full text-xs border border-blue-300">
+                    🔄 オッズ自動更新中
+                  </span>
+                )}
+                {currentRace.oddsUpdatedAt && (
+                  <span className="ml-2 px-2 py-0.5 bg-green-100 text-green-700 rounded-full text-xs border border-green-300">
+                    📊 最終更新: {new Date(currentRace.oddsUpdatedAt).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' })}
+                  </span>
+                )}
               </p>
             </div>
           </div>
