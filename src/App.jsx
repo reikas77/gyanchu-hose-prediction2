@@ -304,6 +304,9 @@ const HorseAnalysisApp = () => {
   const [isFetchingOdds, setIsFetchingOdds] = useState(false);
   const [oddsFetchMessage, setOddsFetchMessage] = useState('');
   const [oddsLastUpdated, setOddsLastUpdated] = useState(null);
+  const [showDebugInfo, setShowDebugInfo] = useState(false);
+  const [debugHtml, setDebugHtml] = useState('');
+  const [debugParsed, setDebugParsed] = useState(null);
 
   const factors = [
     { name: '能力値', weight: 15, key: 'タイム指数' },
@@ -1072,59 +1075,176 @@ const HorseAnalysisApp = () => {
     return oddsByHorseNum;
   };
 
-  // オッズ取得: HTML解析（JRA / netkeiba をゆるく抽出）
-  const parseOddsFromHtml = (html) => {
+  // オッズ取得: HTML解析（JRA / netkeiba を詳細に抽出）
+  const parseOddsFromHtml = (html, url = '') => {
+    console.log('===== オッズ取得開始 =====');
+    console.log('URL:', url);
+    console.log('取得したHTML（最初の1000文字）:', html.substring(0, 1000));
+    
     const oddsByHorseNum = {};
-    // 馬番とオッズの近接抽出（簡易）
-    // 例: 1  2.3 / 01 2.3 など
-    const lines = html.replace(/<[^>]*>/g, '\n').split(/\n/).map(t => t.trim()).filter(Boolean);
     const nameToNum = new Map(currentRace.horses.map(h => [h.name.replace(/\s+/g, ''), h.horseNum]));
-    for (let i = 0; i < lines.length; i++) {
-      const t = lines[i];
-      // 数字2つ並びの形式: 番号 + オッズ
-      const m = t.match(/^(0?\d{1,2})\D+([\d.]{1,5})$/);
-      if (m) {
-        const num = parseInt(m[1], 10);
-        const odds = parseFloat(m[2]);
-        if (num > 0 && odds > 0) oddsByHorseNum[num] = odds;
-        continue;
+    const allHorseNums = new Set(currentRace.horses.map(h => h.horseNum));
+    
+    // netkeiba.com用パターン
+    if (url.includes('netkeiba.com')) {
+      console.log('🔍 netkeiba.comパーサーを使用');
+      // パターン1: <td class="num">1</td>...<td class="tan">2.3</td>
+      const tableRowMatches = html.matchAll(/<tr[^>]*>[\s\S]*?<\/tr>/gi);
+      for (const rowMatch of tableRowMatches) {
+        const row = rowMatch[0];
+        // 馬番抽出
+        const numMatch = row.match(/<td[^>]*class="num"[^>]*>(\d{1,2})<\/td>/i);
+        if (!numMatch) continue;
+        const num = parseInt(numMatch[1], 10);
+        if (!allHorseNums.has(num)) continue;
+        
+        // 単勝オッズ抽出（tanクラスまたはtd内の数値）
+        const oddsMatch = row.match(/<td[^>]*class="tan"[^>]*>([\d.]+)<\/td>/i) || 
+                         row.match(/<td[^>]*>[\s\S]*?(\d{1,3}\.\d{1,2})[\s\S]*?<\/td>/i);
+        if (oddsMatch) {
+          const odds = parseFloat(oddsMatch[1]);
+          if (num > 0 && odds > 0 && odds < 1000) {
+            oddsByHorseNum[num] = odds;
+            console.log(`✅ 馬番${num}: ${odds}倍（netkeibaパターン1）`);
+          }
+        }
       }
-      // 馬名行の直後にオッズ行が来るケース
-      const nm = t.replace(/\s+/g, '');
-      if (nameToNum.has(nm)) {
-        const lookahead = lines.slice(i + 1, i + 4).join(' ');
-        const m2 = lookahead.match(/([\d.]{1,5})\s*(倍|x)?/);
-        if (m2) {
-          const odds = parseFloat(m2[1]);
-          const num = nameToNum.get(nm);
-          if (num && odds > 0) oddsByHorseNum[num] = odds;
+      
+      // パターン2: データ属性やJSON構造から取得
+      const jsonMatch = html.match(/window\.raceInfo\s*=\s*({[\s\S]*?});/);
+      if (jsonMatch) {
+        try {
+          const raceInfo = JSON.parse(jsonMatch[1]);
+          if (raceInfo.tansho && Array.isArray(raceInfo.tansho)) {
+            raceInfo.tansho.forEach(item => {
+              if (item.umaban && item.ninki_bairitsu) {
+                const num = parseInt(item.umaban, 10);
+                const odds = parseFloat(item.ninki_bairitsu);
+                if (num > 0 && odds > 0 && allHorseNums.has(num)) {
+                  oddsByHorseNum[num] = odds;
+                  console.log(`✅ 馬番${num}: ${odds}倍（netkeiba JSON）`);
+                }
+              }
+            });
+          }
+        } catch (e) {
+          console.warn('JSON解析失敗:', e);
         }
       }
     }
+    
+    // JRA公式サイト用パターン
+    if (url.includes('jra.go.jp')) {
+      console.log('🔍 JRA公式サイトパーサーを使用');
+      // パターン1: テーブル構造から取得
+      const tableRowMatches = html.matchAll(/<tr[^>]*>[\s\S]*?<\/tr>/gi);
+      for (const rowMatch of tableRowMatches) {
+        const row = rowMatch[0];
+        // 馬番とオッズを抽出
+        const numMatch = row.match(/馬番[^>]*>(\d{1,2})<\/|(\d{1,2})\s*番/i);
+        const oddsMatch = row.match(/(\d{1,3}\.\d{1,2})\s*倍|単勝[^>]*>([\d.]+)</i);
+        
+        if (numMatch && oddsMatch) {
+          const num = parseInt(numMatch[1] || numMatch[2], 10);
+          const odds = parseFloat(oddsMatch[1] || oddsMatch[2]);
+          if (num > 0 && odds > 0 && allHorseNums.has(num)) {
+            oddsByHorseNum[num] = odds;
+            console.log(`✅ 馬番${num}: ${odds}倍（JRAパターン1）`);
+          }
+        }
+      }
+    }
+    
+    // 汎用パターン（上記で取得できなかった場合）
+    if (Object.keys(oddsByHorseNum).length === 0) {
+      console.log('🔍 汎用パーサーを使用');
+      const text = html.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '').replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '');
+      const lines = text.replace(/<[^>]*>/g, ' ').split(/\s+/).filter(Boolean);
+      
+      // 馬番とオッズの組み合わせを探す
+      for (let i = 0; i < lines.length - 1; i++) {
+        const numMatch = lines[i].match(/^(\d{1,2})$/);
+        if (numMatch) {
+          const num = parseInt(numMatch[1], 10);
+          if (!allHorseNums.has(num)) continue;
+          
+          // 次の数値がオッズの可能性
+          const nextOddsMatch = lines[i + 1].match(/^(\d{1,3}\.\d{1,2})$/);
+          if (nextOddsMatch) {
+            const odds = parseFloat(nextOddsMatch[1]);
+            if (odds > 0 && odds < 1000 && !oddsByHorseNum[num]) {
+              oddsByHorseNum[num] = odds;
+              console.log(`✅ 馬番${num}: ${odds}倍（汎用パターン）`);
+            }
+          }
+        }
+      }
+    }
+    
+    console.log('抽出した生データ:', oddsByHorseNum);
+    console.log('取得できた馬番:', Object.keys(oddsByHorseNum).map(n => `${n}番`).join(', '));
+    const missing = currentRace.horses.filter(h => !oddsByHorseNum[h.horseNum]).map(h => h.horseNum);
+    console.log('取得できなかった馬番:', missing.length > 0 ? missing.join(', ') : 'なし');
+    console.log('===== オッズ取得完了 =====');
+    
     return oddsByHorseNum;
   };
 
-  // オッズ保存（既存がある場合は確認）
-  const saveOddsWithConfirm = (newOdds) => {
+  // オッズ保存（既存がある場合は確認・フォールバック処理）
+  const saveOddsWithConfirm = (newOdds, mergeWithExisting = true) => {
     if (!newOdds || Object.keys(newOdds).length === 0) {
-      window.alert('❌ 取得失敗：手動入力してください');
+      setOddsFetchMessage('❌ 取得失敗：手動入力してください');
       return;
     }
+    
+    const totalHorses = currentRace.horses.length;
+    const fetchedCount = Object.keys(newOdds).length;
+    const missingNums = currentRace.horses
+      .filter(h => !newOdds[h.horseNum])
+      .map(h => h.horseNum)
+      .sort((a, b) => a - b);
+    
+    let finalOdds = { ...newOdds };
+    
+    // フォールバック: 既存オッズとマージ
+    if (mergeWithExisting && currentRace.odds && Object.keys(currentRace.odds).length > 0) {
+      Object.entries(currentRace.odds).forEach(([num, odds]) => {
+        if (!finalOdds[num] && odds > 0) {
+          finalOdds[num] = odds;
+        }
+      });
+    }
+    
     const hasExisting = currentRace.odds && Object.keys(currentRace.odds).length > 0;
-    if (hasExisting) {
-      const ok = window.confirm('既存のオッズがあります。上書きしますか？');
+    if (hasExisting && fetchedCount > 0) {
+      const ok = window.confirm(
+        `${fetchedCount}頭のオッズを取得しました。\n` +
+        (missingNums.length > 0 ? `取得できなかった馬: ${missingNums.join(', ')}番\n` : '') +
+        `既存のオッズを更新しますか？`
+      );
       if (!ok) return;
     }
-    updateRaceOdds(newOdds);
+    
+    updateRaceOdds(finalOdds);
     const now = new Date();
     setOddsLastUpdated(now.toISOString());
     const raceRef = ref(database, `races/${currentRace.firebaseId}/oddsUpdatedAt`);
     set(raceRef, now.toISOString());
-    setOddsFetchMessage(`✅ オッズを更新しました（${Object.keys(newOdds).length}頭）`);
+    
+    let message = `✅ オッズを更新しました（${fetchedCount}頭`;
+    if (totalHorses > fetchedCount) {
+      message += `/${totalHorses}頭`;
+    }
+    message += '）';
+    if (missingNums.length > 0) {
+      message += `\n取得できなかった馬: ${missingNums.join(', ')}番`;
+    }
+    setOddsFetchMessage(message);
+    
     setTimeout(() => {
       setShowFetchOddsModal(false);
       setOddsFetchMessage('');
-    }, 1000);
+    }, 2000);
   };
 
   // URLから取得（CORS回避: allorigins）
@@ -1136,21 +1256,64 @@ const HorseAnalysisApp = () => {
     try {
       setIsFetchingOdds(true);
       setOddsFetchMessage('取得中...⏳');
+      setDebugHtml('');
+      setDebugParsed(null);
+      
+      console.log('===== URL取得開始 =====');
+      console.log('入力URL:', oddsFetchUrl);
+      
       const proxied = `https://api.allorigins.win/raw?url=${encodeURIComponent(oddsFetchUrl)}`;
+      console.log('プロキシURL:', proxied);
+      
       const res = await fetch(proxied, { method: 'GET' });
-      if (!res.ok) throw new Error('fetch failed');
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+      }
+      
       const html = await res.text();
-      const odds = parseOddsFromHtml(html);
+      console.log('取得HTMLサイズ:', html.length, '文字');
+      
+      // デバッグ用にHTMLを保存（常に保存して、チェックボックスで表示制御）
+      setDebugHtml(html.substring(0, 5000)); // 最初の5000文字
+      
+      const odds = parseOddsFromHtml(html, oddsFetchUrl);
+      console.log('パース後のデータ:', odds);
+      
+      // デバッグ用にパース結果を保存（常に保存して、チェックボックスで表示制御）
+      setDebugParsed(odds);
+      
       // 検証: 0以下/NaNを除去
-      const cleaned = Object.fromEntries(Object.entries(odds).filter(([k, v]) => typeof v === 'number' && v > 0 && v < 1000));
+      const cleaned = Object.fromEntries(
+        Object.entries(odds).filter(([k, v]) => {
+          const isValid = typeof v === 'number' && !isNaN(v) && v > 0 && v < 1000;
+          if (!isValid && v) {
+            console.warn(`⚠️ 無効なオッズ値（馬番${k}）:`, v);
+          }
+          return isValid;
+        })
+      );
+      
+      console.log('クリーニング後のデータ:', cleaned);
+      console.log('取得できた頭数:', Object.keys(cleaned).length);
+      
       if (Object.keys(cleaned).length === 0) {
-        setOddsFetchMessage('❌ 取得できませんでした。貼り付けで試してください');
+        const errorMsg = '❌ 取得できませんでした。\n' +
+          '・URLが正しいオッズページか確認してください\n' +
+          '・「貼り付け」タブで手動入力してください\n' +
+          '・デバッグ情報を表示して確認してください';
+        setOddsFetchMessage(errorMsg);
         setIsFetchingOdds(false);
         return;
       }
+      
       saveOddsWithConfirm(cleaned);
     } catch (e) {
-      setOddsFetchMessage('❌ 取得失敗：手動入力してください');
+      console.error('❌ 取得エラー:', e);
+      const errorMsg = `❌ 取得失敗：${e.message}\n` +
+        'ネットワークエラーまたはHTML構造の変更の可能性があります。\n' +
+        '「貼り付け」タブで手動入力してください。';
+      setOddsFetchMessage(errorMsg);
+      setIsFetchingOdds(false);
     } finally {
       setIsFetchingOdds(false);
     }
@@ -2877,11 +3040,34 @@ const HorseAnalysisApp = () => {
                     placeholder="https://..."
                     className="w-full px-4 py-3 border-2 border-pink-300 rounded-2xl focus:outline-none focus:border-pink-500"
                   />
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={showDebugInfo}
+                      onChange={(e) => setShowDebugInfo(e.target.checked)}
+                      className="w-4 h-4 accent-purple-500"
+                    />
+                    <span className="text-xs font-bold text-gray-700">デバッグ情報を表示</span>
+                  </label>
                   <button
                     onClick={fetchOddsFromUrl}
                     disabled={isFetchingOdds}
                     className={`w-full px-6 py-3 rounded-full font-bold shadow-lg ${isFetchingOdds ? 'bg-gray-300 text-gray-600' : 'bg-gradient-to-r from-pink-400 to-pink-500 text-white hover:shadow-2xl hover:scale-105'} transition`}
                   >{isFetchingOdds ? '取得中...⏳' : '取得開始'}</button>
+                  
+                  {showDebugInfo && debugHtml && (
+                    <div className="mt-4 p-3 bg-gray-100 rounded-2xl border-2 border-gray-300">
+                      <h4 className="text-sm font-bold text-gray-700 mb-2">取得したHTML（最初の5000文字）</h4>
+                      <pre className="text-xs overflow-auto max-h-40 font-mono bg-white p-2 rounded border">{debugHtml}</pre>
+                    </div>
+                  )}
+                  
+                  {showDebugInfo && debugParsed && (
+                    <div className="mt-4 p-3 bg-gray-100 rounded-2xl border-2 border-gray-300">
+                      <h4 className="text-sm font-bold text-gray-700 mb-2">パース結果</h4>
+                      <pre className="text-xs overflow-auto max-h-40 font-mono bg-white p-2 rounded border">{JSON.stringify(debugParsed, null, 2)}</pre>
+                    </div>
+                  )}
                 </div>
               ) : (
                 <div className="space-y-3">
@@ -2908,9 +3094,11 @@ const HorseAnalysisApp = () => {
               )}
 
               {oddsFetchMessage && (
-                <div className={`mt-4 p-3 rounded-2xl text-sm font-bold border-2 text-center ${
+                <div className={`mt-4 p-3 rounded-2xl text-sm font-bold border-2 ${
                   oddsFetchMessage.startsWith('✅') ? 'bg-green-100 border-green-400 text-green-800' : 'bg-red-100 border-red-400 text-red-800'
-                }`}>{oddsFetchMessage}</div>
+                }`}>
+                  <div className="whitespace-pre-line text-left">{oddsFetchMessage}</div>
+                </div>
               )}
 
               <div className="mt-6 flex gap-4">
