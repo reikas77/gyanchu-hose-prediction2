@@ -1106,21 +1106,33 @@ const HorseAnalysisApp = () => {
           
           if (sanrenAmount >= 100) {
             // 10%以上の馬（軸馬を除く）
-            const use10 = winRate10Plus.slice(0, Math.min(3, winRate10Plus.length));
+            const use10 = winRate10Plus; // 全件
             // 5%以上の馬（10%以上を含む、軸馬を除く）
-            const use5 = winRate5Plus.slice(0, Math.min(3, winRate5Plus.length));
+            const use5 = winRate5Plus; // 全件
             
             if (use10.length > 0 && use5.length > 0) {
-              // 軸馬-10%以上-5%以上（10%以上を含む）の組み合わせ
-              const combinations = use10.length * use5.length;
-              const perBet = Math.floor(sanrenAmount / combinations / 100) * 100;
-              
-              bets.push({
-                type: '三連複',
-                horses: [`${top1.horseNum}-${use10.map(h => h.horseNum).join(',')}-${use5.map(h => h.horseNum).join(',')}`],
-                amount: perBet * combinations,
-                reason: `フォーメーション ${combinations}点 各${perBet}円`
+              // 軸馬-10%以上-5%以上（10%以上を含む）のユニーク組み合わせ数（b!=c）
+              const pairKeys = new Set();
+              use10.forEach(b => {
+                use5.forEach(c => {
+                  if (b.horseNum !== c.horseNum) {
+                    const k1 = Math.min(b.horseNum, c.horseNum);
+                    const k2 = Math.max(b.horseNum, c.horseNum);
+                    pairKeys.add(`${k1}-${k2}`);
+                  }
+                });
               });
+              const combinations = pairKeys.size;
+              if (combinations > 0) {
+                const perBet = Math.floor(sanrenAmount / combinations / 100) * 100;
+                
+                bets.push({
+                  type: '三連複',
+                  horses: [`${top1.horseNum}-${use10.map(h => h.horseNum).join(',')}-${use5.map(h => h.horseNum).join(',')}`],
+                  amount: perBet * combinations,
+                  reason: `フォーメーション ${combinations}点 各${perBet}円`
+                });
+              }
             }
           }
         }
@@ -1207,21 +1219,33 @@ const HorseAnalysisApp = () => {
           
           if (sanrenAmount >= 100) {
             // 10%以上の馬（軸馬を除く）
-            const use10 = winRate10Plus.slice(0, Math.min(3, winRate10Plus.length));
+            const use10 = winRate10Plus; // 全件
             // 5%以上の馬（10%以上を含む、軸馬を除く）
-            const use5 = winRate5Plus.slice(0, Math.min(3, winRate5Plus.length));
+            const use5 = winRate5Plus; // 全件
             
             if (use10.length > 0 && use5.length > 0) {
-              // 軸馬-10%以上-5%以上（10%以上を含む）の組み合わせ
-              const combinations = use10.length * use5.length;
-              const perBet = Math.floor(sanrenAmount / combinations / 100) * 100;
-              
-              bets.push({
-                type: '三連複',
-                horses: [`${mainHorse.horseNum}-${use10.map(h => h.horseNum).join(',')}-${use5.map(h => h.horseNum).join(',')}`],
-                amount: perBet * combinations,
-                reason: `フォーメーション ${combinations}点 各${perBet}円`
+              // 軸馬-10%以上-5%以上（10%以上を含む）のユニーク組み合わせ数（b!=c）
+              const pairKeys = new Set();
+              use10.forEach(b => {
+                use5.forEach(c => {
+                  if (b.horseNum !== c.horseNum) {
+                    const k1 = Math.min(b.horseNum, c.horseNum);
+                    const k2 = Math.max(b.horseNum, c.horseNum);
+                    pairKeys.add(`${k1}-${k2}`);
+                  }
+                });
               });
+              const combinations = pairKeys.size;
+              if (combinations > 0) {
+                const perBet = Math.floor(sanrenAmount / combinations / 100) * 100;
+                
+                bets.push({
+                  type: '三連複',
+                  horses: [`${mainHorse.horseNum}-${use10.map(h => h.horseNum).join(',')}-${use5.map(h => h.horseNum).join(',')}`],
+                  amount: perBet * combinations,
+                  reason: `フォーメーション ${combinations}点 各${perBet}円`
+                });
+              }
             }
           }
         }
@@ -3643,7 +3667,7 @@ const HorseAnalysisApp = () => {
 
                   {showTrackDiagram ? (
                     (() => {
-                      // 展開利ファクターで1位の馬を見つける
+                      // 展開利ファクターで1位の馬を特定
                       const topTenkiHorse = currentRace.horses
                         .filter(h => !excludedHorses[h.horseNum] && h.scores && h.scores['展開利'] !== undefined)
                         .reduce((top, horse) => {
@@ -3651,24 +3675,43 @@ const HorseAnalysisApp = () => {
                           return score > (top.scores['展開利'] || 0) ? horse : top;
                         }, currentRace.horses[0]);
 
-                      // 結果を馬番で並べ替え（ゴール付近の位置を計算）
-                      const horsesWithPositions = virtualRaceResults.results.map(([horseName, counts], index) => {
-                        const horseNum = parseInt(horseName.split('番')[0]);
-                        const horse = currentRace.horses.find(h => h.horseNum === horseNum);
-                        const isTopTenki = topTenkiHorse && horse && horse.horseNum === topTenkiHorse.horseNum;
-                        // 1着率が高いほどゴールに近い
-                        const finishPosition = 100 - parseFloat(counts['期待勝率'] || 0);
-                        return {
-                          horseNum,
-                          horseName,
-                          finishPosition,
-                          isTopTenki,
-                          counts,
-                          index
-                        };
-                      }).sort((a, b) => a.finishPosition - b.finishPosition);
+                      // 勝率ランキング（現在の予想スコア）から到達順位を作成
+                      const ranked = resultsWithRate
+                        .filter(h => !excludedHorses[h.horseNum])
+                        .sort((a, b) => b.winRate - a.winRate);
 
-                      // レーンを3つに分割
+                      if (ranked.length === 0) return null;
+
+                      const topRate = ranked[0].winRate || 0;
+                      const inContention = ranked.filter(h => (topRate - h.winRate) < 20);
+                      const notInContention = ranked
+                        .filter(h => (topRate - h.winRate) >= 20)
+                        .map(h => h.horseNum)
+                        .sort((a, b) => a - b);
+
+                      // 距離スケールを勝率差に基づき作成（右端がゴール）
+                      const diffs = inContention.map((h, i) => i === 0 ? 0 : (inContention[i - 1].winRate - h.winRate));
+                      const cumulatives = diffs.reduce((arr, d) => {
+                        const prev = arr.length > 0 ? arr[arr.length - 1] : 0;
+                        arr.push(prev + Math.max(0, d));
+                        return arr;
+                      }, []);
+                      const totalSpan = cumulatives.length > 0 ? (cumulatives[cumulatives.length - 1] || 1) : 1;
+
+                      const horsesWithPositions = inContention.map((h, idx) => {
+                        const horse = currentRace.horses.find(x => x.horseNum === h.horseNum);
+                        const isTopTenki = topTenkiHorse && horse && horse.horseNum === topTenkiHorse.horseNum;
+                        // 右側がゴール。上位ほど右に配置。
+                        const leftPct = 95 - (totalSpan === 0 ? 0 : (cumulatives[idx] / totalSpan) * 85);
+                        return {
+                          horseNum: h.horseNum,
+                          leftPct,
+                          isTopTenki,
+                          index: idx
+                        };
+                      });
+
+                      // レーンを3つに分割（視認性向上）
                       const lanes = [[], [], []];
                       horsesWithPositions.forEach((horse, idx) => {
                         lanes[idx % 3].push(horse);
@@ -3686,7 +3729,7 @@ const HorseAnalysisApp = () => {
                       };
 
                       return (
-                        <div className="mb-6 relative" style={{ minHeight: '400px' }}>
+                        <div className="mb-6 relative" style={{ minHeight: '240px' }}>
                           {/* 背景（トラック） */}
                           <div className="absolute inset-0 bg-gradient-to-r from-green-400 to-green-600 rounded-2xl opacity-20"></div>
                           
@@ -3704,17 +3747,17 @@ const HorseAnalysisApp = () => {
                             </div>
                           </div>
 
-                          {/* 馬を配置 */}
+                          {/* 馬を配置（横方向に進行、右端がFinish） */}
                           {lanes.map((lane, laneIdx) => (
-                            <div key={laneIdx} className="absolute inset-0 flex flex-col">
+                            <div key={laneIdx} className="absolute inset-0">
                               {lane.map((horse) => (
                                 <div
                                   key={horse.horseNum}
                                   className="absolute flex items-center gap-2"
                                   style={{
-                                    left: `${10 + laneIdx * 30}%`,
-                                    top: `${20 + (horse.finishPosition / 100) * 60}%`,
-                                    transform: 'translateY(-50%)',
+                                    left: `${horse.leftPct}%`,
+                                    top: `${25 + laneIdx * 25}%`,
+                                    transform: 'translate(-50%, -50%)',
                                     zIndex: 10 - horse.index
                                   }}
                                 >
@@ -3753,11 +3796,7 @@ const HorseAnalysisApp = () => {
                               {topTenkiHorse && `★ = 展開利ファクター1位 (${topTenkiHorse.horseNum}番 ${topTenkiHorse.name})`}
                             </div>
                             <div className="text-white text-xs">
-                              Not in contention at finish: {currentRace.horses
-                                .filter(h => !horsesWithPositions.find(hp => hp.horseNum === h.horseNum))
-                                .map(h => h.horseNum)
-                                .sort((a, b) => a - b)
-                                .join(', ') || 'なし'}
+                              Not in contention at finish: {notInContention.length > 0 ? notInContention.join(', ') : 'なし'}
                             </div>
                           </div>
                         </div>
