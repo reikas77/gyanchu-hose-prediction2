@@ -962,34 +962,34 @@ const HorseAnalysisApp = () => {
     const lines = text.trim().split('\n');
     const oddsMap = {};
     
-    lines.forEach((line) => {
-      // タブで分割
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i].trim();
       const parts = line.split('\t');
       
-      // 最初の2つの要素が数字の行を探す（枠番と馬番）
-      if (parts.length >= 2) {
-        const wakuban = parts[0].trim();
-        const umaban = parts[1].trim();
+      // 枠番と馬番がある行を探す（例: "1	1	"）
+      if (parts.length >= 2 && /^\d+$/.test(parts[0]) && /^\d+$/.test(parts[1])) {
+        const horseNum = parseInt(parts[1]);
         
-        // 両方が数字の場合のみ処理
-        if (/^\d+$/.test(wakuban) && /^\d+$/.test(umaban)) {
-          const horseNum = parseInt(umaban);
+        // この行の次の3行目（馬名の次の行）にオッズがある
+        // i+3の行を確認
+        if (i + 3 < lines.length) {
+          const oddsLine = lines[i + 3].trim();
           
-          // その行全体から小数点を含む数値を全て抽出
-          const allNumbers = line.match(/\d+\.\d+|\d+/g);
+          // その行から全ての数値を抽出
+          const numbers = oddsLine.match(/\d+\.\d+|\d+/g);
           
-          if (allNumbers && allNumbers.length > 0) {
-            // 最後の数値を取得（これがオッズ）
-            const lastNum = parseFloat(allNumbers[allNumbers.length - 1]);
+          if (numbers && numbers.length > 0) {
+            // 最後の数値がオッズ（例: 751.6, 3.0, 526.9）
+            const lastNumber = parseFloat(numbers[numbers.length - 1]);
             
-            // オッズとして妥当な範囲（1.0〜999.9）
-            if (lastNum >= 1.0 && lastNum < 1000) {
-              oddsMap[horseNum] = lastNum;
+            // オッズとして妥当な範囲
+            if (lastNumber >= 1.0 && lastNumber < 1000) {
+              oddsMap[horseNum] = lastNumber;
             }
           }
         }
       }
-    });
+    }
     
     return oddsMap;
   };
