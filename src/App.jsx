@@ -3770,7 +3770,7 @@ const HorseAnalysisApp = () => {
                                   {/* 馬のボックス */}
                                   <div
                                     className={`relative ${getHorseColor(horse.horseNum)} rounded-lg px-2 py-1 shadow-lg border-2 border-white ${
-                                      horse.isTopTenki ? 'ring-4 ring-yellow-400 ring-opacity-75 animate-pulse' : ''
+                                      horse.isTopTenki ? 'ring-4 ring-yellow-400 ring-opacity-75 animate-pulse pt-4' : ''
                                     }`}
                                     style={{
                                       minWidth: '50px'
