@@ -283,6 +283,19 @@ const HorseAnalysisApp = () => {
   const [selectedAnalysisCourse, setSelectedAnalysisCourse] = useState(null);
   const [factorAnalysisResults, setFactorAnalysisResults] = useState(null);
 
+  // ソート・フィルター用のstate
+  const [upcomingSortBy, setUpcomingSortBy] = useState('startTime'); // 'startTime' or 'createdAt'
+  const [pastSortBy, setPastSortBy] = useState('newest'); // 'newest' or 'oldest'
+  const [pastFilterCourse, setPastFilterCourse] = useState(null); // コースフィルター
+
+  // 勝率ランキングの印機能用のstate
+  const [horseMarks, setHorseMarks] = useState({}); // { horseNum: mark } の形式
+  const [editingHorseMark, setEditingHorseMark] = useState(null);
+  const [tempHorseMark, setTempHorseMark] = useState('');
+
+  // 仮想レース視覚化用のstate
+  const [showTrackDiagram, setShowTrackDiagram] = useState(false);
+
   const factors = [
     { name: '能力値', weight: 15, key: 'タイム指数' },
     { name: 'コース・距離適性', weight: 18, key: 'コース・距離適性' },
@@ -853,6 +866,7 @@ const HorseAnalysisApp = () => {
       setOddsInput(race.odds || {});
       setExcludedHorses(race.excluded || {});
       setExpCoefficient(race.expCoefficient || 0.1);
+      setHorseMarks(race.horseMarks || {});
       
       // 👁️ 閲覧数をカウント
       incrementViewCount(race.firebaseId);
@@ -1091,10 +1105,13 @@ const HorseAnalysisApp = () => {
           }
           
           if (sanrenAmount >= 100) {
+            // 10%以上の馬（軸馬を除く）
             const use10 = winRate10Plus.slice(0, Math.min(3, winRate10Plus.length));
+            // 5%以上の馬（10%以上を含む、軸馬を除く）
             const use5 = winRate5Plus.slice(0, Math.min(3, winRate5Plus.length));
             
             if (use10.length > 0 && use5.length > 0) {
+              // 軸馬-10%以上-5%以上（10%以上を含む）の組み合わせ
               const combinations = use10.length * use5.length;
               const perBet = Math.floor(sanrenAmount / combinations / 100) * 100;
               
@@ -1189,10 +1206,13 @@ const HorseAnalysisApp = () => {
           }
           
           if (sanrenAmount >= 100) {
+            // 10%以上の馬（軸馬を除く）
             const use10 = winRate10Plus.slice(0, Math.min(3, winRate10Plus.length));
+            // 5%以上の馬（10%以上を含む、軸馬を除く）
             const use5 = winRate5Plus.slice(0, Math.min(3, winRate5Plus.length));
             
             if (use10.length > 0 && use5.length > 0) {
+              // 軸馬-10%以上-5%以上（10%以上を含む）の組み合わせ
               const combinations = use10.length * use5.length;
               const perBet = Math.floor(sanrenAmount / combinations / 100) * 100;
               
@@ -1576,10 +1596,119 @@ const HorseAnalysisApp = () => {
               </div>
 
               {races.length > 0 ? (
+                <>
+                  {activeTab === 'races-upcoming' && (
+                    <div className="mb-4 flex gap-2 items-center flex-wrap">
+                      <span className="text-xs md:text-sm font-bold text-gray-700">ソート:</span>
+                      <button
+                        onClick={() => setUpcomingSortBy('startTime')}
+                        className={`px-3 py-1.5 rounded-full text-xs md:text-sm font-bold transition ${
+                          upcomingSortBy === 'startTime'
+                            ? 'bg-purple-400 text-white'
+                            : 'bg-gray-200 text-gray-800 hover:bg-gray-300'
+                        }`}
+                      >
+                        出走時間順
+                      </button>
+                      <button
+                        onClick={() => setUpcomingSortBy('createdAt')}
+                        className={`px-3 py-1.5 rounded-full text-xs md:text-sm font-bold transition ${
+                          upcomingSortBy === 'createdAt'
+                            ? 'bg-purple-400 text-white'
+                            : 'bg-gray-200 text-gray-800 hover:bg-gray-300'
+                        }`}
+                      >
+                        作成日順
+                      </button>
+                    </div>
+                  )}
+                  {activeTab === 'races-past' && (
+                    <div className="mb-4 flex gap-2 items-center flex-wrap">
+                      <span className="text-xs md:text-sm font-bold text-gray-700">ソート:</span>
+                      <button
+                        onClick={() => setPastSortBy('newest')}
+                        className={`px-3 py-1.5 rounded-full text-xs md:text-sm font-bold transition ${
+                          pastSortBy === 'newest'
+                            ? 'bg-purple-400 text-white'
+                            : 'bg-gray-200 text-gray-800 hover:bg-gray-300'
+                        }`}
+                      >
+                        新しい順
+                      </button>
+                      <button
+                        onClick={() => setPastSortBy('oldest')}
+                        className={`px-3 py-1.5 rounded-full text-xs md:text-sm font-bold transition ${
+                          pastSortBy === 'oldest'
+                            ? 'bg-purple-400 text-white'
+                            : 'bg-gray-200 text-gray-800 hover:bg-gray-300'
+                        }`}
+                      >
+                        古い順
+                      </button>
+                      <span className="text-xs md:text-sm font-bold text-gray-700 ml-2">コース:</span>
+                      <button
+                        onClick={() => setPastFilterCourse(null)}
+                        className={`px-3 py-1.5 rounded-full text-xs md:text-sm font-bold transition ${
+                          pastFilterCourse === null
+                            ? 'bg-purple-400 text-white'
+                            : 'bg-gray-200 text-gray-800 hover:bg-gray-300'
+                        }`}
+                      >
+                        全て
+                      </button>
+                      {Array.from(new Set(races.filter(r => r.result && r.courseKey).map(r => r.courseKey))).sort().map(course => (
+                        <button
+                          key={course}
+                          onClick={() => setPastFilterCourse(course)}
+                          className={`px-3 py-1.5 rounded-full text-xs md:text-sm font-bold transition ${
+                            pastFilterCourse === course
+                              ? 'bg-purple-400 text-white'
+                              : 'bg-gray-200 text-gray-800 hover:bg-gray-300'
+                          }`}
+                        >
+                          {course}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
                   {(activeTab === 'races-upcoming' 
-                    ? races.filter(r => !r.result)
-                    : races.filter(r => r.result)
+                    ? (() => {
+                        const upcoming = races.filter(r => !r.result);
+                        if (upcomingSortBy === 'startTime') {
+                          return upcoming.sort((a, b) => {
+                            if (!a.startTime && !b.startTime) return 0;
+                            if (!a.startTime) return 1;
+                            if (!b.startTime) return -1;
+                            return new Date(a.startTime) - new Date(b.startTime);
+                          });
+                        } else {
+                          return upcoming.sort((a, b) => {
+                            const aDate = new Date(a.createdAt || 0);
+                            const bDate = new Date(b.createdAt || 0);
+                            return bDate - aDate;
+                          });
+                        }
+                      })()
+                    : (() => {
+                        let past = races.filter(r => r.result);
+                        if (pastFilterCourse) {
+                          past = past.filter(r => r.courseKey === pastFilterCourse);
+                        }
+                        if (pastSortBy === 'newest') {
+                          return past.sort((a, b) => {
+                            const aDate = new Date(a.createdAt || 0);
+                            const bDate = new Date(b.createdAt || 0);
+                            return bDate - aDate;
+                          });
+                        } else {
+                          return past.sort((a, b) => {
+                            const aDate = new Date(a.createdAt || 0);
+                            const bDate = new Date(b.createdAt || 0);
+                            return aDate - bDate;
+                          });
+                        }
+                      })()
                   ).map((race) => (
                     <div
                       key={race.firebaseId}
@@ -1685,6 +1814,7 @@ const HorseAnalysisApp = () => {
                     </div>
                   ))}
                 </div>
+                </>
               ) : (
                 <p className="text-gray-500 text-center py-12 text-sm md:text-lg">レースデータがまだありません</p>
               )}
@@ -2707,6 +2837,23 @@ const HorseAnalysisApp = () => {
                           <div className="text-sm md:text-lg font-bold text-gray-800 flex items-center gap-2 truncate">
                             <HorsePixelArt size={16} />
                             {horse.horseNum}. {horse.name}
+                            {horseMarks[horse.horseNum] && (
+                              <span className="px-2 py-0.5 bg-yellow-200 text-yellow-800 rounded-full text-xs font-bold border border-yellow-400">
+                                {horseMarks[horse.horseNum]}
+                              </span>
+                            )}
+                            {isAdmin && (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setEditingHorseMark(horse.horseNum);
+                                  setTempHorseMark(horseMarks[horse.horseNum] || '');
+                                }}
+                                className="px-2 py-0.5 bg-blue-400 text-white rounded text-xs font-bold hover:bg-blue-500 transition"
+                              >
+                                {horseMarks[horse.horseNum] ? '✏️' : '➕'}印
+                              </button>
+                            )}
                           </div>
                           {odds > 0 && (
                             <div className="text-xs text-gray-700 mt-1 font-bold">
@@ -2814,6 +2961,68 @@ const HorseAnalysisApp = () => {
             )}
           </div>
         </div>
+
+        {/* 印編集モーダル */}
+        {editingHorseMark && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+            <div className="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl">
+              <h3 className="text-xl font-bold mb-4 text-gray-800 flex items-center gap-2">
+                <StarPixelArt size={24} />
+                印を編集（{editingHorseMark}番）
+              </h3>
+              
+              <div className="mb-6">
+                <label className="block text-sm font-bold text-gray-700 mb-2">
+                  印（例: ⭐, 🔥, ⚡など）
+                </label>
+                <input
+                  type="text"
+                  value={tempHorseMark}
+                  onChange={(e) => setTempHorseMark(e.target.value)}
+                  placeholder="印を入力（空欄で削除）"
+                  className="w-full px-4 py-3 border-2 border-purple-300 rounded-2xl text-sm focus:outline-none focus:border-purple-500 font-bold"
+                  maxLength={10}
+                />
+              </div>
+
+              <div className="flex gap-4">
+                <button
+                  onClick={() => {
+                    const newMarks = { ...horseMarks };
+                    if (tempHorseMark.trim()) {
+                      newMarks[editingHorseMark] = tempHorseMark.trim();
+                    } else {
+                      delete newMarks[editingHorseMark];
+                    }
+                    setHorseMarks(newMarks);
+                    
+                    // Firebaseに保存
+                    const raceRef = ref(database, `races/${currentRace.firebaseId}`);
+                    set(raceRef, {
+                      ...currentRace,
+                      horseMarks: newMarks
+                    });
+                    
+                    setEditingHorseMark(null);
+                    setTempHorseMark('');
+                  }}
+                  className="flex-1 px-6 py-3 bg-gradient-to-r from-purple-500 to-indigo-500 text-white rounded-full font-bold shadow-lg hover:shadow-2xl transition"
+                >
+                  保存
+                </button>
+                <button
+                  onClick={() => {
+                    setEditingHorseMark(null);
+                    setTempHorseMark('');
+                  }}
+                  className="px-6 py-3 bg-gray-400 text-white rounded-full font-bold hover:bg-gray-500 transition"
+                >
+                  キャンセル
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         <div className="bg-white rounded-3xl p-3 md:p-6 shadow-lg border-2 border-blue-200">
           <div className="flex justify-between items-center mb-3 md:mb-4">
@@ -3408,7 +3617,154 @@ const HorseAnalysisApp = () => {
                     </p>
                   </div>
 
-                  <div className="space-y-3 mb-6">
+                  {/* Track Diagram表示切り替え */}
+                  <div className="mb-4 flex gap-2 items-center justify-center">
+                    <button
+                      onClick={() => setShowTrackDiagram(false)}
+                      className={`px-4 py-2 rounded-full text-sm font-bold transition ${
+                        !showTrackDiagram
+                          ? 'bg-purple-400 text-white'
+                          : 'bg-gray-200 text-gray-800 hover:bg-gray-300'
+                      }`}
+                    >
+                      結果一覧
+                    </button>
+                    <button
+                      onClick={() => setShowTrackDiagram(true)}
+                      className={`px-4 py-2 rounded-full text-sm font-bold transition ${
+                        showTrackDiagram
+                          ? 'bg-purple-400 text-white'
+                          : 'bg-gray-200 text-gray-800 hover:bg-gray-300'
+                      }`}
+                    >
+                      Track Diagram
+                    </button>
+                  </div>
+
+                  {showTrackDiagram ? (
+                    (() => {
+                      // 展開利ファクターで1位の馬を見つける
+                      const topTenkiHorse = currentRace.horses
+                        .filter(h => !excludedHorses[h.horseNum] && h.scores && h.scores['展開利'] !== undefined)
+                        .reduce((top, horse) => {
+                          const score = horse.scores['展開利'] || 0;
+                          return score > (top.scores['展開利'] || 0) ? horse : top;
+                        }, currentRace.horses[0]);
+
+                      // 結果を馬番で並べ替え（ゴール付近の位置を計算）
+                      const horsesWithPositions = virtualRaceResults.results.map(([horseName, counts], index) => {
+                        const horseNum = parseInt(horseName.split('番')[0]);
+                        const horse = currentRace.horses.find(h => h.horseNum === horseNum);
+                        const isTopTenki = topTenkiHorse && horse && horse.horseNum === topTenkiHorse.horseNum;
+                        // 1着率が高いほどゴールに近い
+                        const finishPosition = 100 - parseFloat(counts['期待勝率'] || 0);
+                        return {
+                          horseNum,
+                          horseName,
+                          finishPosition,
+                          isTopTenki,
+                          counts,
+                          index
+                        };
+                      }).sort((a, b) => a.finishPosition - b.finishPosition);
+
+                      // レーンを3つに分割
+                      const lanes = [[], [], []];
+                      horsesWithPositions.forEach((horse, idx) => {
+                        lanes[idx % 3].push(horse);
+                      });
+
+                      // 馬の色を決定
+                      const getHorseColor = (horseNum) => {
+                        const colors = [
+                          'bg-blue-500', 'bg-red-500', 'bg-green-500', 'bg-yellow-500',
+                          'bg-purple-500', 'bg-pink-500', 'bg-orange-500', 'bg-teal-500',
+                          'bg-indigo-500', 'bg-cyan-500', 'bg-gray-500', 'bg-lime-500',
+                          'bg-amber-500', 'bg-rose-500', 'bg-violet-500', 'bg-emerald-500'
+                        ];
+                        return colors[(horseNum - 1) % colors.length];
+                      };
+
+                      return (
+                        <div className="mb-6 relative" style={{ minHeight: '400px' }}>
+                          {/* 背景（トラック） */}
+                          <div className="absolute inset-0 bg-gradient-to-r from-green-400 to-green-600 rounded-2xl opacity-20"></div>
+                          
+                          {/* レーン線 */}
+                          <div className="absolute inset-0 flex flex-col">
+                            {[0, 1, 2].map(lane => (
+                              <div key={lane} className="flex-1 border-t border-white opacity-30"></div>
+                            ))}
+                          </div>
+
+                          {/* ゴールライン */}
+                          <div className="absolute right-0 top-0 bottom-0 w-2 bg-white flex items-center justify-center">
+                            <div className="transform -rotate-90 text-white font-bold text-xs whitespace-nowrap">
+                              Finish
+                            </div>
+                          </div>
+
+                          {/* 馬を配置 */}
+                          {lanes.map((lane, laneIdx) => (
+                            <div key={laneIdx} className="absolute inset-0 flex flex-col">
+                              {lane.map((horse) => (
+                                <div
+                                  key={horse.horseNum}
+                                  className="absolute flex items-center gap-2"
+                                  style={{
+                                    left: `${10 + laneIdx * 30}%`,
+                                    top: `${20 + (horse.finishPosition / 100) * 60}%`,
+                                    transform: 'translateY(-50%)',
+                                    zIndex: 10 - horse.index
+                                  }}
+                                >
+                                  {/* 速度線 */}
+                                  <div className="absolute right-full mr-2 flex gap-1">
+                                    {[0, 1, 2, 3].map(i => (
+                                      <div key={i} className="w-1 h-4 bg-white opacity-60"></div>
+                                    ))}
+                                  </div>
+                                  {/* 馬のボックス */}
+                                  <div
+                                    className={`relative ${getHorseColor(horse.horseNum)} rounded-lg px-2 py-1 shadow-lg border-2 border-white ${
+                                      horse.isTopTenki ? 'ring-4 ring-yellow-400 ring-opacity-75 animate-pulse' : ''
+                                    }`}
+                                    style={{
+                                      minWidth: '50px'
+                                    }}
+                                  >
+                                    <div className="text-white font-bold text-sm text-center">
+                                      {horse.horseNum}
+                                    </div>
+                                    {horse.isTopTenki && (
+                                      <div className="absolute -top-2 -right-2 text-yellow-300 text-lg animate-pulse">
+                                        ★
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          ))}
+
+                          {/* 凡例 */}
+                          <div className="absolute bottom-0 left-0 right-0 p-4 bg-black bg-opacity-50 rounded-b-2xl">
+                            <div className="text-white text-xs font-bold mb-2">
+                              {topTenkiHorse && `★ = 展開利ファクター1位 (${topTenkiHorse.horseNum}番 ${topTenkiHorse.name})`}
+                            </div>
+                            <div className="text-white text-xs">
+                              Not in contention at finish: {currentRace.horses
+                                .filter(h => !horsesWithPositions.find(hp => hp.horseNum === h.horseNum))
+                                .map(h => h.horseNum)
+                                .sort((a, b) => a - b)
+                                .join(', ') || 'なし'}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })()
+                  ) : (
+                    <div className="space-y-3 mb-6">
                     {virtualRaceResults.results.map(([horseName, counts], index) => {
                       const first = counts['1着'];
                       const second = counts['2着'];
@@ -3491,6 +3847,7 @@ const HorseAnalysisApp = () => {
                       );
                     })}
                   </div>
+                  )}
 
                   <div className="flex gap-4">
                     <button
