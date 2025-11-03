@@ -1354,7 +1354,10 @@ const HorseAnalysisApp = () => {
         tanshoHits++;
         // 的中時の払戻金（100円あたり）
         const odds = race.odds[targetHorse.horseNum] || 0;
-        tanshoReturn += odds * 100; // 追加
+        const returnAmount = odds * 100;
+        // 10円単位に丸める（競馬の払戻金ルール）
+        const roundedReturn = Math.round(returnAmount / 10) * 10;
+        tanshoReturn += roundedReturn;
       }
       
       if (resultNums.slice(0, 3).includes(targetHorse.horseNum)) {
@@ -2075,9 +2078,13 @@ const HorseAnalysisApp = () => {
                           const investment = stats.total * 100;
                           const returns = (investment * parseFloat(stats.tansho.recovery)) / 100;
                           const profit = returns - investment;
-                          return profit >= 0 
-                            ? `+${profit.toFixed(0)}円 (${stats.total}レース)`
-                            : `${profit.toFixed(0)}円 (${stats.total}レース)`;
+                          
+                          // 10円単位に丸める
+                          const roundedProfit = Math.round(profit / 10) * 10;
+                          
+                          return roundedProfit >= 0 
+                            ? `+${roundedProfit.toLocaleString()}円 (${stats.total}レース)`
+                            : `${roundedProfit.toLocaleString()}円 (${stats.total}レース)`;
                         })()}
                       </div>
                     </div>
