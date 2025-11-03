@@ -298,7 +298,7 @@ const HorseAnalysisApp = () => {
 
   // オッズ自動取得用のstate
   const [showFetchOddsModal, setShowFetchOddsModal] = useState(false);
-  const [oddsFetchMode, setOddsFetchMode] = useState('url'); // 'url' | 'paste'
+  const [oddsFetchMode, setOddsFetchMode] = useState('paste'); // 'url' | 'paste' | 'manual'
   const [oddsFetchUrl, setOddsFetchUrl] = useState('');
   const [oddsPasteText, setOddsPasteText] = useState('');
   const [isFetchingOdds, setIsFetchingOdds] = useState(false);
@@ -307,6 +307,7 @@ const HorseAnalysisApp = () => {
   const [showDebugInfo, setShowDebugInfo] = useState(false);
   const [debugHtml, setDebugHtml] = useState('');
   const [debugParsed, setDebugParsed] = useState(null);
+  const [manualOddsInput, setManualOddsInput] = useState({}); // { horseNum: odds }
 
   const factors = [
     { name: '能力値', weight: 15, key: 'タイム指数' },
@@ -1049,29 +1050,98 @@ const HorseAnalysisApp = () => {
     return candidates.sort((a, b) => b.winRate - a.winRate)[0];
   };
 
-  // オッズ取得: テキスト解析（貼り付け）
+  // オッズ取得: テキスト解析（貼り付け）大幅強化版
   const parseOddsFromText = (text) => {
+    console.log('===== テキスト解析開始 =====');
+    console.log('入力テキスト（最初の500文字）:', text.substring(0, 500));
+    
     const oddsByHorseNum = {};
     const lines = (text || '').split(/\n|\r/).map(l => l.trim()).filter(Boolean);
     const nameToNum = new Map(currentRace.horses.map(h => [h.name.replace(/\s+/g, ''), h.horseNum]));
-    for (const line of lines) {
-      // パターン1: 1 馬名 2.3
-      const m1 = line.match(/^(\d{1,2})\D+([\u3040-\u30FF\u4E00-\u9FFF\w\s\-・。、（）()]+?)\D+([\d.]+)$/);
+    const allHorseNums = new Set(currentRace.horses.map(h => h.horseNum));
+    
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      
+      // パターン1: 馬番 オッズ (タブ区切りやスペース区切り)
+      // 例: "1	2.3" または "1 2.3" または "01\t2.3"
+      const m1 = line.match(/^(\d{1,2})[\s\t]+([\d.]+)(?:\s|$)/);
       if (m1) {
         const num = parseInt(m1[1], 10);
-        const odds = parseFloat(m1[3]);
-        if (num > 0 && odds > 0) oddsByHorseNum[num] = odds;
-        continue;
+        const odds = parseFloat(m1[2]);
+        if (allHorseNums.has(num) && odds > 0 && odds < 1000) {
+          oddsByHorseNum[num] = odds;
+          console.log(`✅ 馬番${num}: ${odds}倍（パターン1: タブ/スペース区切り）`);
+          continue;
+        }
       }
-      // パターン2: 馬名 2.3（馬名一致）
-      const m2 = line.match(/^([\u3040-\u30FF\u4E00-\u9FFF\w\s\-・。、（）()]+?)\D+([\d.]+)$/);
+      
+      // パターン2: 馬番 馬名 オッズ
+      // 例: "1 ウマタロウ 2.3" または "01 馬名\t2.3"
+      const m2 = line.match(/^(\d{1,2})[\s\t]+([\u3040-\u30FF\u4E00-\u9FFF\w\s\-・。、（）()]+?)[\s\t]+([\d.]+)/);
       if (m2) {
-        const nm = (m2[1] || '').replace(/\s+/g, '');
-        const odds = parseFloat(m2[2]);
+        const num = parseInt(m2[1], 10);
+        const odds = parseFloat(m2[3]);
+        if (allHorseNums.has(num) && odds > 0 && odds < 1000) {
+          oddsByHorseNum[num] = odds;
+          console.log(`✅ 馬番${num}: ${odds}倍（パターン2: 馬番 馬名 オッズ）`);
+          continue;
+        }
+      }
+      
+      // パターン3: 馬名 オッズ（馬名一致）
+      // 例: "ウマタロウ 2.3" または "馬名\t2.3"
+      const m3 = line.match(/^([\u3040-\u30FF\u4E00-\u9FFF\w\s\-・。、（）()]+?)[\s\t]+([\d.]+)/);
+      if (m3) {
+        const nm = (m3[1] || '').replace(/\s+/g, '');
+        const odds = parseFloat(m3[2]);
         const num = nameToNum.get(nm);
-        if (num && odds > 0) oddsByHorseNum[num] = odds;
+        if (num && odds > 0 && odds < 1000) {
+          oddsByHorseNum[num] = odds;
+          console.log(`✅ 馬番${num}: ${odds}倍（パターン3: 馬名 ${nm}）`);
+          continue;
+        }
+      }
+      
+      // パターン4: CSV形式（カンマ区切り）
+      // 例: "1,ウマタロウ,2.3" または "1,2.3"
+      const m4 = line.match(/^(\d{1,2}),[\s]*(?:[^,]*,[\s]*)?([\d.]+)/);
+      if (m4) {
+        const num = parseInt(m4[1], 10);
+        const odds = parseFloat(m4[2]);
+        if (allHorseNums.has(num) && odds > 0 && odds < 1000) {
+          oddsByHorseNum[num] = odds;
+          console.log(`✅ 馬番${num}: ${odds}倍（パターン4: CSV形式）`);
+          continue;
+        }
+      }
+      
+      // パターン5: HTMLのテーブル行から抽出
+      // 例: "<td>1</td><td>2.3</td>"
+      if (line.includes('<td>') || line.includes('<TD>')) {
+        const numMatch = line.match(/<t[dh][^>]*>(\d{1,2})<\/t[dh]>/i);
+        const oddsMatches = line.matchAll(/<t[dh][^>]*>([\d.]+)<\/t[dh]>/gi);
+        if (numMatch) {
+          const num = parseInt(numMatch[1], 10);
+          if (allHorseNums.has(num)) {
+            for (const oddsMatch of oddsMatches) {
+              const odds = parseFloat(oddsMatch[1]);
+              if (odds > 0 && odds < 1000) {
+                oddsByHorseNum[num] = odds;
+                console.log(`✅ 馬番${num}: ${odds}倍（パターン5: HTMLテーブル）`);
+                break;
+              }
+            }
+          }
+        }
       }
     }
+    
+    console.log('解析結果:', oddsByHorseNum);
+    const missing = currentRace.horses.filter(h => !oddsByHorseNum[h.horseNum]).map(h => h.horseNum);
+    console.log('取得できなかった馬番:', missing.length > 0 ? missing.join(', ') : 'なし');
+    console.log('===== テキスト解析完了 =====');
+    
     return oddsByHorseNum;
   };
 
@@ -3049,13 +3119,17 @@ const HorseAnalysisApp = () => {
 
               <div className="mb-4 flex gap-2">
                 <button
-                  onClick={() => setOddsFetchMode('url')}
-                  className={`flex-1 px-4 py-2 rounded-full font-bold text-sm ${oddsFetchMode==='url' ? 'bg-gradient-to-r from-pink-400 to-pink-500 text-white' : 'bg-gray-200 text-gray-800 hover:bg-gray-300'}`}
-                >URL入力</button>
-                <button
                   onClick={() => setOddsFetchMode('paste')}
-                  className={`flex-1 px-4 py-2 rounded-full font-bold text-sm ${oddsFetchMode==='paste' ? 'bg-gradient-to-r from-purple-400 to-purple-500 text-white' : 'bg-gray-200 text-gray-800 hover:bg-gray-300'}`}
+                  className={`flex-1 px-3 py-2 rounded-full font-bold text-xs ${oddsFetchMode==='paste' ? 'bg-gradient-to-r from-purple-400 to-purple-500 text-white' : 'bg-gray-200 text-gray-800 hover:bg-gray-300'}`}
                 >貼り付け</button>
+                <button
+                  onClick={() => setOddsFetchMode('manual')}
+                  className={`flex-1 px-3 py-2 rounded-full font-bold text-xs ${oddsFetchMode==='manual' ? 'bg-gradient-to-r from-blue-400 to-blue-500 text-white' : 'bg-gray-200 text-gray-800 hover:bg-gray-300'}`}
+                >一括入力</button>
+                <button
+                  onClick={() => setOddsFetchMode('url')}
+                  className={`flex-1 px-3 py-2 rounded-full font-bold text-xs ${oddsFetchMode==='url' ? 'bg-gradient-to-r from-pink-400 to-pink-500 text-white' : 'bg-gray-200 text-gray-800 hover:bg-gray-300'}`}
+                >URL（実験的）</button>
               </div>
 
               {oddsFetchMode === 'url' ? (
@@ -3097,26 +3171,82 @@ const HorseAnalysisApp = () => {
                     </div>
                   )}
                 </div>
-              ) : (
+              ) : oddsFetchMode === 'paste' ? (
                 <div className="space-y-3">
                   <label className="block text-sm font-bold text-gray-700">オッズ表を貼り付け</label>
+                  <p className="text-xs text-gray-600">
+                    対応形式: 「1 2.3」「1 ウマタロウ 2.3」「1,2.3」など
+                  </p>
                   <textarea
                     value={oddsPasteText}
                     onChange={(e) => setOddsPasteText(e.target.value)}
                     className="w-full h-40 p-4 border-2 border-purple-300 rounded-2xl font-mono text-sm focus:outline-none focus:border-purple-500"
-                    placeholder="例)\n1 ウマタロウ 2.3\n2 ホースフジ 5.4\n..."
+                    placeholder="例)\n1 ウマタロウ 2.3\n2 ホースフジ 5.4\nまたは\n1\t2.3\n2\t5.4\nまたは\n1,2.3\n2,5.4"
                   />
                   <button
                     onClick={() => {
                       const odds = parseOddsFromText(oddsPasteText);
                       const cleaned = Object.fromEntries(Object.entries(odds).filter(([k,v]) => typeof v === 'number' && v > 0 && v < 1000));
                       if (Object.keys(cleaned).length === 0) {
-                        setOddsFetchMessage('❌ 解析できませんでした');
+                        setOddsFetchMessage('❌ 解析できませんでした\n対応形式を確認してください');
                         return;
                       }
                       saveOddsWithConfirm(cleaned);
                     }}
                     className="w-full px-6 py-3 rounded-full font-bold shadow-lg bg-gradient-to-r from-purple-400 to-purple-500 text-white hover:shadow-2xl hover:scale-105 transition"
+                  >保存する</button>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  <label className="block text-sm font-bold text-gray-700">馬番ごとにオッズを入力</label>
+                  <div className="max-h-96 overflow-y-auto border-2 border-blue-300 rounded-2xl p-3">
+                    <div className="grid grid-cols-2 gap-2 text-xs font-bold mb-2 pb-2 border-b-2 border-blue-200">
+                      <div>馬番・馬名</div>
+                      <div>単勝オッズ</div>
+                    </div>
+                    {currentRace.horses.sort((a, b) => a.horseNum - b.horseNum).map((horse) => (
+                      <div key={horse.horseNum} className="grid grid-cols-2 gap-2 mb-2">
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-blue-600">{horse.horseNum}.</span>
+                          <span className="text-xs truncate">{horse.name}</span>
+                        </div>
+                        <input
+                          type="number"
+                          step="0.1"
+                          value={manualOddsInput[horse.horseNum] || ''}
+                          onChange={(e) => {
+                            const value = e.target.value === '' ? '' : parseFloat(e.target.value);
+                            setManualOddsInput({
+                              ...manualOddsInput,
+                              [horse.horseNum]: value
+                            });
+                          }}
+                          placeholder="2.3"
+                          className="w-full px-2 py-1 border-2 border-blue-300 rounded-lg text-sm focus:outline-none focus:border-blue-500"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                  <button
+                    onClick={() => {
+                      const cleaned = Object.fromEntries(
+                        Object.entries(manualOddsInput).filter(([k, v]) => {
+                          const num = parseInt(k, 10);
+                          const odds = typeof v === 'number' ? v : parseFloat(v);
+                          return !isNaN(odds) && odds > 0 && odds < 1000 && currentRace.horses.some(h => h.horseNum === num);
+                        })
+                      );
+                      if (Object.keys(cleaned).length === 0) {
+                        setOddsFetchMessage('❌ オッズを入力してください');
+                        return;
+                      }
+                      // 数値に変換
+                      const finalOdds = Object.fromEntries(
+                        Object.entries(cleaned).map(([k, v]) => [k, typeof v === 'number' ? v : parseFloat(v)])
+                      );
+                      saveOddsWithConfirm(finalOdds);
+                    }}
+                    className="w-full px-6 py-3 rounded-full font-bold shadow-lg bg-gradient-to-r from-blue-400 to-blue-500 text-white hover:shadow-2xl hover:scale-105 transition"
                   >保存する</button>
                 </div>
               )}
@@ -3232,10 +3362,16 @@ const HorseAnalysisApp = () => {
               <button
                 onClick={() => {
                   setShowFetchOddsModal(true);
-                  setOddsFetchMode('url');
+                  setOddsFetchMode('paste');
                   setOddsFetchUrl('');
                   setOddsPasteText('');
                   setOddsFetchMessage('');
+                  // 既存オッズを一括入力フォームに反映
+                  if (currentRace.odds && Object.keys(currentRace.odds).length > 0) {
+                    setManualOddsInput({ ...currentRace.odds });
+                  } else {
+                    setManualOddsInput({});
+                  }
                 }}
                 className="flex-1 md:flex-none px-3 py-1.5 md:py-2 bg-gradient-to-r from-pink-400 to-purple-500 text-white rounded-full font-bold text-xs shadow-lg hover:shadow-2xl hover:scale-105 transition transform whitespace-nowrap flex items-center justify-center gap-1"
               >
