@@ -3780,7 +3780,7 @@ const HorseAnalysisApp = () => {
                                       {horse.horseNum}
                                     </div>
                                     {horse.isTopTenki && (
-                                      <div className="absolute -top-2 -right-2 text-yellow-300 text-lg animate-pulse">
+                                      <div className="absolute -top-4 left-1/2 -translate-x-1/2 text-yellow-300 text-lg animate-pulse z-10">
                                         ★
                                       </div>
                                     )}
@@ -3793,7 +3793,7 @@ const HorseAnalysisApp = () => {
                           {/* 凡例 */}
                           <div className="absolute bottom-0 left-0 right-0 p-4 bg-black bg-opacity-50 rounded-b-2xl">
                             <div className="text-white text-xs font-bold mb-2">
-                              {topTenkiHorse && `★ = 展開利ファクター1位 (${topTenkiHorse.horseNum}番 ${topTenkiHorse.name})`}
+                              {topTenkiHorse && `★ = 最も展開利のある馬`}
                             </div>
                             <div className="text-white text-xs">
                               Not in contention at finish: {notInContention.length > 0 ? notInContention.join(', ') : 'なし'}
