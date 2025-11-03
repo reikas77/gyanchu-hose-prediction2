@@ -296,6 +296,15 @@ const HorseAnalysisApp = () => {
   // 仮想レース視覚化用のstate
   const [showTrackDiagram, setShowTrackDiagram] = useState(false);
 
+  // オッズ自動取得用のstate
+  const [showFetchOddsModal, setShowFetchOddsModal] = useState(false);
+  const [oddsFetchMode, setOddsFetchMode] = useState('url'); // 'url' | 'paste'
+  const [oddsFetchUrl, setOddsFetchUrl] = useState('');
+  const [oddsPasteText, setOddsPasteText] = useState('');
+  const [isFetchingOdds, setIsFetchingOdds] = useState(false);
+  const [oddsFetchMessage, setOddsFetchMessage] = useState('');
+  const [oddsLastUpdated, setOddsLastUpdated] = useState(null);
+
   const factors = [
     { name: '能力値', weight: 15, key: 'タイム指数' },
     { name: 'コース・距離適性', weight: 18, key: 'コース・距離適性' },
@@ -1035,6 +1044,116 @@ const HorseAnalysisApp = () => {
     if (candidates.length === 0) return null;
     
     return candidates.sort((a, b) => b.winRate - a.winRate)[0];
+  };
+
+  // オッズ取得: テキスト解析（貼り付け）
+  const parseOddsFromText = (text) => {
+    const oddsByHorseNum = {};
+    const lines = (text || '').split(/\n|\r/).map(l => l.trim()).filter(Boolean);
+    const nameToNum = new Map(currentRace.horses.map(h => [h.name.replace(/\s+/g, ''), h.horseNum]));
+    for (const line of lines) {
+      // パターン1: 1 馬名 2.3
+      const m1 = line.match(/^(\d{1,2})\D+([\u3040-\u30FF\u4E00-\u9FFF\w\s\-・。、（）()]+?)\D+([\d.]+)$/);
+      if (m1) {
+        const num = parseInt(m1[1], 10);
+        const odds = parseFloat(m1[3]);
+        if (num > 0 && odds > 0) oddsByHorseNum[num] = odds;
+        continue;
+      }
+      // パターン2: 馬名 2.3（馬名一致）
+      const m2 = line.match(/^([\u3040-\u30FF\u4E00-\u9FFF\w\s\-・。、（）()]+?)\D+([\d.]+)$/);
+      if (m2) {
+        const nm = (m2[1] || '').replace(/\s+/g, '');
+        const odds = parseFloat(m2[2]);
+        const num = nameToNum.get(nm);
+        if (num && odds > 0) oddsByHorseNum[num] = odds;
+      }
+    }
+    return oddsByHorseNum;
+  };
+
+  // オッズ取得: HTML解析（JRA / netkeiba をゆるく抽出）
+  const parseOddsFromHtml = (html) => {
+    const oddsByHorseNum = {};
+    // 馬番とオッズの近接抽出（簡易）
+    // 例: 1  2.3 / 01 2.3 など
+    const lines = html.replace(/<[^>]*>/g, '\n').split(/\n/).map(t => t.trim()).filter(Boolean);
+    const nameToNum = new Map(currentRace.horses.map(h => [h.name.replace(/\s+/g, ''), h.horseNum]));
+    for (let i = 0; i < lines.length; i++) {
+      const t = lines[i];
+      // 数字2つ並びの形式: 番号 + オッズ
+      const m = t.match(/^(0?\d{1,2})\D+([\d.]{1,5})$/);
+      if (m) {
+        const num = parseInt(m[1], 10);
+        const odds = parseFloat(m[2]);
+        if (num > 0 && odds > 0) oddsByHorseNum[num] = odds;
+        continue;
+      }
+      // 馬名行の直後にオッズ行が来るケース
+      const nm = t.replace(/\s+/g, '');
+      if (nameToNum.has(nm)) {
+        const lookahead = lines.slice(i + 1, i + 4).join(' ');
+        const m2 = lookahead.match(/([\d.]{1,5})\s*(倍|x)?/);
+        if (m2) {
+          const odds = parseFloat(m2[1]);
+          const num = nameToNum.get(nm);
+          if (num && odds > 0) oddsByHorseNum[num] = odds;
+        }
+      }
+    }
+    return oddsByHorseNum;
+  };
+
+  // オッズ保存（既存がある場合は確認）
+  const saveOddsWithConfirm = (newOdds) => {
+    if (!newOdds || Object.keys(newOdds).length === 0) {
+      window.alert('❌ 取得失敗：手動入力してください');
+      return;
+    }
+    const hasExisting = currentRace.odds && Object.keys(currentRace.odds).length > 0;
+    if (hasExisting) {
+      const ok = window.confirm('既存のオッズがあります。上書きしますか？');
+      if (!ok) return;
+    }
+    updateRaceOdds(newOdds);
+    const now = new Date();
+    setOddsLastUpdated(now.toISOString());
+    const raceRef = ref(database, `races/${currentRace.firebaseId}/oddsUpdatedAt`);
+    set(raceRef, now.toISOString());
+    setOddsFetchMessage(`✅ オッズを更新しました（${Object.keys(newOdds).length}頭）`);
+    setTimeout(() => {
+      setShowFetchOddsModal(false);
+      setOddsFetchMessage('');
+    }, 1000);
+  };
+
+  // URLから取得（CORS回避: allorigins）
+  const fetchOddsFromUrl = async () => {
+    if (!oddsFetchUrl || !/^https?:\/\//i.test(oddsFetchUrl)) {
+      setOddsFetchMessage('❌ URLが無効です');
+      return;
+    }
+    try {
+      setIsFetchingOdds(true);
+      setOddsFetchMessage('取得中...⏳');
+      const proxied = `https://api.allorigins.win/raw?url=${encodeURIComponent(oddsFetchUrl)}`;
+      const res = await fetch(proxied, { method: 'GET' });
+      if (!res.ok) throw new Error('fetch failed');
+      const html = await res.text();
+      const odds = parseOddsFromHtml(html);
+      // 検証: 0以下/NaNを除去
+      const cleaned = Object.fromEntries(Object.entries(odds).filter(([k, v]) => typeof v === 'number' && v > 0 && v < 1000));
+      if (Object.keys(cleaned).length === 0) {
+        setOddsFetchMessage('❌ 取得できませんでした。貼り付けで試してください');
+        setIsFetchingOdds(false);
+        return;
+      }
+      saveOddsWithConfirm(cleaned);
+    } catch (e) {
+      setOddsFetchMessage('❌ 取得失敗：手動入力してください');
+    } finally {
+      setIsFetchingOdds(false);
+    }
   };
 
   // 買い目自動生成
@@ -2728,6 +2847,80 @@ const HorseAnalysisApp = () => {
           </div>
         )}
 
+        {/* オッズ自動取得モーダル */}
+        {showFetchOddsModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+            <div className="bg-white rounded-3xl p-6 max-w-xl w-full shadow-2xl max-h-[90vh] overflow-y-auto">
+              <h3 className="text-xl font-bold mb-4 text-gray-800 flex items-center gap-2">
+                <StarPixelArt size={24} />
+                オッズ自動取得
+              </h3>
+
+              <div className="mb-4 flex gap-2">
+                <button
+                  onClick={() => setOddsFetchMode('url')}
+                  className={`flex-1 px-4 py-2 rounded-full font-bold text-sm ${oddsFetchMode==='url' ? 'bg-gradient-to-r from-pink-400 to-pink-500 text-white' : 'bg-gray-200 text-gray-800 hover:bg-gray-300'}`}
+                >URL入力</button>
+                <button
+                  onClick={() => setOddsFetchMode('paste')}
+                  className={`flex-1 px-4 py-2 rounded-full font-bold text-sm ${oddsFetchMode==='paste' ? 'bg-gradient-to-r from-purple-400 to-purple-500 text-white' : 'bg-gray-200 text-gray-800 hover:bg-gray-300'}`}
+                >貼り付け</button>
+              </div>
+
+              {oddsFetchMode === 'url' ? (
+                <div className="space-y-3">
+                  <label className="block text-sm font-bold text-gray-700">オッズページのURL（JRA / netkeiba）</label>
+                  <input
+                    type="text"
+                    value={oddsFetchUrl}
+                    onChange={(e) => setOddsFetchUrl(e.target.value)}
+                    placeholder="https://..."
+                    className="w-full px-4 py-3 border-2 border-pink-300 rounded-2xl focus:outline-none focus:border-pink-500"
+                  />
+                  <button
+                    onClick={fetchOddsFromUrl}
+                    disabled={isFetchingOdds}
+                    className={`w-full px-6 py-3 rounded-full font-bold shadow-lg ${isFetchingOdds ? 'bg-gray-300 text-gray-600' : 'bg-gradient-to-r from-pink-400 to-pink-500 text-white hover:shadow-2xl hover:scale-105'} transition`}
+                  >{isFetchingOdds ? '取得中...⏳' : '取得開始'}</button>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  <label className="block text-sm font-bold text-gray-700">オッズ表を貼り付け</label>
+                  <textarea
+                    value={oddsPasteText}
+                    onChange={(e) => setOddsPasteText(e.target.value)}
+                    className="w-full h-40 p-4 border-2 border-purple-300 rounded-2xl font-mono text-sm focus:outline-none focus:border-purple-500"
+                    placeholder="例)\n1 ウマタロウ 2.3\n2 ホースフジ 5.4\n..."
+                  />
+                  <button
+                    onClick={() => {
+                      const odds = parseOddsFromText(oddsPasteText);
+                      const cleaned = Object.fromEntries(Object.entries(odds).filter(([k,v]) => typeof v === 'number' && v > 0 && v < 1000));
+                      if (Object.keys(cleaned).length === 0) {
+                        setOddsFetchMessage('❌ 解析できませんでした');
+                        return;
+                      }
+                      saveOddsWithConfirm(cleaned);
+                    }}
+                    className="w-full px-6 py-3 rounded-full font-bold shadow-lg bg-gradient-to-r from-purple-400 to-purple-500 text-white hover:shadow-2xl hover:scale-105 transition"
+                  >保存する</button>
+                </div>
+              )}
+
+              {oddsFetchMessage && (
+                <div className="mt-4 p-3 rounded-2xl text-sm font-bold border-2 text-center "+
+                  (oddsFetchMessage.startsWith('✅') ? 'bg-green-100 border-green-400 text-green-800' : 'bg-red-100 border-red-400 text-red-800')}>{oddsFetchMessage}</div>
+              )}
+
+              <div className="mt-6 flex gap-4">
+                <button
+                  onClick={() => setShowFetchOddsModal(false)}
+                  className="flex-1 px-6 py-3 bg-gray-300 text-gray-800 rounded-full font-bold hover:bg-gray-400 transition"
+                >閉じる</button>
+              </div>
+            </div>
+          </div>
+        )}
         <div className="bg-white rounded-3xl p-3 md:p-6 shadow-lg mb-4 md:mb-6 border-2 border-pink-200">
           <h2 className="text-base md:text-xl font-bold text-gray-700 mb-3 md:mb-4 flex items-center gap-2">
             <StarPixelArt size={20} />
@@ -2821,6 +3014,20 @@ const HorseAnalysisApp = () => {
               </button>
               <button
                 onClick={() => {
+                  setShowFetchOddsModal(true);
+                  setOddsFetchMode('url');
+                  setOddsFetchUrl('');
+                  setOddsPasteText('');
+                  setOddsFetchMessage('');
+                }}
+                className="flex-1 md:flex-none px-3 py-1.5 md:py-2 bg-gradient-to-r from-pink-400 to-purple-500 text-white rounded-full font-bold text-xs shadow-lg hover:shadow-2xl hover:scale-105 transition transform whitespace-nowrap flex items-center justify-center gap-1"
+              >
+                <span>⚡</span>
+                <span className="hidden md:inline">オッズ取得</span>
+                <span className="md:hidden">オッズ</span>
+              </button>
+              <button
+                onClick={() => {
                   setShowVirtualRaceModal(true);
                   setVirtualRaceResults(null);
                 }}
@@ -2831,6 +3038,11 @@ const HorseAnalysisApp = () => {
                 <span className="md:hidden">仮想</span>
               </button>
             </div>
+            {currentRace.oddsUpdatedAt && (
+              <div className="mt-2 text-xs text-gray-600 font-bold">
+                最終更新: {new Date(currentRace.oddsUpdatedAt).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' })}
+              </div>
+            )}
           </div>
 
           <div className="space-y-2">
