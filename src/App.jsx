@@ -184,6 +184,13 @@ const HorseAnalysisApp = () => {
       return;
     }
   }, []);
+
+  // 通知許可をリクエスト
+  useEffect(() => {
+    if ('Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission();
+    }
+  }, []);
   
   const [races, setRaces] = useState([]);
   const [currentRace, setCurrentRace] = useState(null);
@@ -1303,6 +1310,7 @@ const HorseAnalysisApp = () => {
 
     let tanshoHits = 0;
     let fukushoHits = 0;
+    let tanshoReturn = 0; // 追加：単勝回収額
 
     recordedRaces.forEach(race => {
       const raceWinRates = calculateWinRate(race.horses, race.courseKey);
@@ -1344,6 +1352,9 @@ const HorseAnalysisApp = () => {
       
       if (resultNums[0] === targetHorse.horseNum) {
         tanshoHits++;
+        // 的中時の払戻金（100円あたり）
+        const odds = race.odds[targetHorse.horseNum] || 0;
+        tanshoReturn += odds * 100; // 追加
       }
       
       if (resultNums.slice(0, 3).includes(targetHorse.horseNum)) {
@@ -1351,12 +1362,54 @@ const HorseAnalysisApp = () => {
       }
     });
 
+    // 回収率を計算（投資額 = レース数 × 100円）
+    const investment = recordedRaces.length * 100;
+    const recoveryRate = ((tanshoReturn / investment) * 100).toFixed(1);
+
     return {
       total: recordedRaces.length,
-      tansho: { hits: tanshoHits, rate: ((tanshoHits / recordedRaces.length) * 100).toFixed(1) },
+      tansho: { 
+        hits: tanshoHits, 
+        rate: ((tanshoHits / recordedRaces.length) * 100).toFixed(1),
+        recovery: recoveryRate
+      },
       fukusho: { hits: fukushoHits, rate: ((fukushoHits / recordedRaces.length) * 100).toFixed(1) }
     };
   };
+
+  // レース開始5分前をチェックする関数
+  const scheduleRaceNotifications = () => {
+    // 未出走レースを取得
+    const upcomingRaces = races.filter(r => !r.result && r.startTime);
+    
+    upcomingRaces.forEach(race => {
+      const startTime = new Date(race.startTime);
+      const notifyTime = new Date(startTime.getTime() - 5 * 60 * 1000); // 5分前
+      const now = new Date();
+      
+      const timeUntilNotify = notifyTime.getTime() - now.getTime();
+      
+      // 5分前の時刻が未来の場合のみ通知をセット
+      if (timeUntilNotify > 0 && timeUntilNotify < 24 * 60 * 60 * 1000) {
+        setTimeout(() => {
+          if ('Notification' in window && Notification.permission === 'granted') {
+            new Notification('🏇 レース開始5分前！', {
+              body: `${race.name} まもなく発走です`,
+              icon: '/icon-192.png',
+              tag: race.firebaseId
+            });
+          }
+        }, timeUntilNotify);
+      }
+    });
+  };
+
+  // racesが更新されたら通知をスケジュール
+  useEffect(() => {
+    if (races.length > 0) {
+      scheduleRaceNotifications();
+    }
+  }, [races]);
 
   // ✨ ファクター毎の的中率分析関数
   const calculateFactorStats = (courseKey = null) => {
@@ -1993,10 +2046,11 @@ const HorseAnalysisApp = () => {
                     {statsType === 'ai' && 'AIおすすめ馬の成績'}
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
+                    {/* 単勝的中率 */}
                     <div className="bg-gradient-to-br from-pink-100 to-pink-200 rounded-3xl p-4 md:p-6 border-2 border-pink-300 shadow-lg">
                       <div className="flex items-center gap-2 mb-3">
                         <HeartPixelArt size={20} />
-                        <h3 className="text-base md:text-lg font-bold text-pink-700">単勝</h3>
+                        <h3 className="text-base md:text-lg font-bold text-pink-700">単勝的中率</h3>
                       </div>
                       <div className="text-3xl md:text-4xl font-black text-pink-600">
                         {calculateStats(statsFilterCourse, statsType).tansho.rate}%
@@ -2005,6 +2059,30 @@ const HorseAnalysisApp = () => {
                         {calculateStats(statsFilterCourse, statsType).tansho.hits}/{calculateStats(statsFilterCourse, statsType).total} 的中
                       </div>
                     </div>
+                    
+                    {/* 単勝回収率（新規追加） */}
+                    <div className="bg-gradient-to-br from-yellow-100 to-yellow-200 rounded-3xl p-4 md:p-6 border-2 border-yellow-300 shadow-lg">
+                      <div className="flex items-center gap-2 mb-3">
+                        <StarPixelArt size={20} />
+                        <h3 className="text-base md:text-lg font-bold text-yellow-700">単勝回収率</h3>
+                      </div>
+                      <div className="text-3xl md:text-4xl font-black text-yellow-600">
+                        {calculateStats(statsFilterCourse, statsType).tansho.recovery}%
+                      </div>
+                      <div className="text-xs md:text-sm text-yellow-700 mt-2 font-bold">
+                        {(() => {
+                          const stats = calculateStats(statsFilterCourse, statsType);
+                          const investment = stats.total * 100;
+                          const returns = (investment * parseFloat(stats.tansho.recovery)) / 100;
+                          const profit = returns - investment;
+                          return profit >= 0 
+                            ? `+${profit.toFixed(0)}円 (${stats.total}レース)`
+                            : `${profit.toFixed(0)}円 (${stats.total}レース)`;
+                        })()}
+                      </div>
+                    </div>
+                    
+                    {/* 複勝（既存） */}
                     <div className="bg-gradient-to-br from-purple-100 to-purple-200 rounded-3xl p-4 md:p-6 border-2 border-purple-300 shadow-lg">
                       <div className="flex items-center gap-2 mb-3">
                         <TrophyPixelArt size={20} />
@@ -2896,13 +2974,14 @@ const HorseAnalysisApp = () => {
                         </div>
                         <div className="flex-1 min-w-0">
                           <div className="text-sm md:text-lg font-bold text-gray-800 flex items-center gap-2 truncate">
-                            <HorsePixelArt size={16} />
-                            {horse.horseNum}. {horse.name}
-                            {horseMarks[horse.horseNum] && (
-                              <span className="px-2 py-0.5 bg-yellow-200 text-yellow-800 rounded-full text-xs font-bold border border-yellow-400">
+                            {horseMarks[horse.horseNum] ? (
+                              <span className="px-2 py-1 bg-yellow-200 text-yellow-800 rounded-lg text-sm font-bold border-2 border-yellow-400 flex-shrink-0">
                                 {horseMarks[horse.horseNum]}
                               </span>
+                            ) : (
+                              <HorsePixelArt size={16} />
                             )}
+                            {horse.horseNum}. {horse.name}
                             {isAdmin && (
                               <button
                                 onClick={(e) => {
@@ -2912,7 +2991,7 @@ const HorseAnalysisApp = () => {
                                 }}
                                 className="px-2 py-0.5 bg-blue-400 text-white rounded text-xs font-bold hover:bg-blue-500 transition"
                               >
-                                {horseMarks[horse.horseNum] ? '✏️' : '➕'}印
+                                ✏️印
                               </button>
                             )}
                           </div>
