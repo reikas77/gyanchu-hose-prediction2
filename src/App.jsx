@@ -1577,43 +1577,270 @@ const HorseAnalysisApp = () => {
 
       const oddsMapping = {};
 
-      // netkeibaのHTML構造に応じてオッズを抽出
-      // 単勝オッズのセレクターを複数試行
-      let oddsElements = doc.querySelectorAll('.Odds_Odds, .odds, .Odds_OddsTansho, [class*="Odds"], [class*="odds"]');
-      
-      // もし見つからない場合、テーブルから抽出を試みる
-      if (oddsElements.length === 0) {
-        const tableRows = doc.querySelectorAll('table tr, .RaceList tr');
-        tableRows.forEach((row, index) => {
-          const horseNum = index + 1;
-          // オッズを含む可能性のあるセルを探す
-          const cells = row.querySelectorAll('td, th');
+      // デバッグ用: HTMLの一部をコンソールに出力（開発時のみ）
+      if (process.env.NODE_ENV === 'development') {
+        console.log('取得したHTMLの一部:', html.substring(0, 2000));
+      }
+
+      // パターン1: 単勝オッズテーブルから直接取得
+      // netkeibaの一般的な構造: テーブル内のオッズ情報
+      const oddsTable = doc.querySelector('.Tan_Odds, .OddsTanTable, table[class*="Odds"], table[class*="Tansho"]');
+      if (oddsTable) {
+        const rows = oddsTable.querySelectorAll('tr');
+        rows.forEach((row, index) => {
+          // 馬番号を取得（最初のセルに馬番号があることが多い）
+          const horseNumCell = row.querySelector('td:first-child, th:first-child');
+          let horseNum = null;
+          
+          if (horseNumCell) {
+            const horseNumText = horseNumCell.textContent.trim();
+            const numMatch = horseNumText.match(/(\d+)/);
+            if (numMatch) {
+              horseNum = parseInt(numMatch[1]);
+            }
+          }
+          
+          // 馬番号が取得できなかった場合は行インデックスから推測
+          if (!horseNum) {
+            horseNum = index + 1;
+          }
+
+          // オッズを探す（テーブルセル内の数値）
+          const cells = row.querySelectorAll('td');
           cells.forEach(cell => {
             const text = cell.textContent.trim();
-            // オッズ形式（数値.数値）を探す
-            const oddsMatch = text.match(/(\d+\.?\d*)/);
-            if (oddsMatch && parseFloat(oddsMatch[1]) > 0 && parseFloat(oddsMatch[1]) < 1000) {
-              const odds = parseFloat(oddsMatch[1]);
-              if (!oddsMapping[horseNum]) {
+            // オッズ形式（数字.数字）を探す（例: 3.5, 12.8など）
+            const oddsMatch = text.match(/(\d+\.\d+|\d+)/);
+            if (oddsMatch) {
+              const odds = parseFloat(oddsMatch[0]);
+              // オッズの妥当性チェック（0より大きく、1000以下）
+              if (odds > 0 && odds < 1000 && !oddsMapping[horseNum]) {
                 oddsMapping[horseNum] = odds;
               }
             }
           });
         });
-      } else {
-        oddsElements.forEach((element, index) => {
+      }
+
+      // パターン2: クラス名で直接検索
+      if (Object.keys(oddsMapping).length === 0) {
+        const oddsSelectors = [
+          '.Odds_Odds',
+          '.Odds_OddsTansho',
+          '.TanshoOdds',
+          '[class*="Odds"]',
+          '[class*="odds"]',
+          '[class*="Tansho"]',
+          '[class*="tansho"]'
+        ];
+
+        for (const selector of oddsSelectors) {
+          const elements = doc.querySelectorAll(selector);
+          if (elements.length > 0) {
+            elements.forEach((element, index) => {
+              const horseNumber = index + 1;
+              const oddsText = element.textContent.trim();
+              // 数字と小数点のみを抽出
+              const cleanedText = oddsText.replace(/[^\d.]/g, '');
+              const odds = parseFloat(cleanedText);
+              
+              if (!isNaN(odds) && odds > 0 && odds < 1000) {
+                if (!oddsMapping[horseNumber]) {
+                  oddsMapping[horseNumber] = odds;
+                }
+              }
+            });
+            
+            if (Object.keys(oddsMapping).length > 0) {
+              break;
+            }
+          }
+        }
+      }
+
+      // パターン3: データ属性から取得
+      if (Object.keys(oddsMapping).length === 0) {
+        const dataOddsElements = doc.querySelectorAll('[data-odds], [data-odd], [data-tansho]');
+        dataOddsElements.forEach((element, index) => {
           const horseNumber = index + 1;
-          const oddsText = element.textContent.trim();
-          const odds = parseFloat(oddsText.replace(/[^\d.]/g, ''));
-          
-          if (!isNaN(odds) && odds > 0) {
-            oddsMapping[horseNumber] = odds;
+          const oddsValue = element.getAttribute('data-odds') || 
+                           element.getAttribute('data-odd') || 
+                           element.getAttribute('data-tansho');
+          if (oddsValue) {
+            const odds = parseFloat(oddsValue);
+            if (!isNaN(odds) && odds > 0 && odds < 1000) {
+              oddsMapping[horseNumber] = odds;
+            }
           }
         });
       }
 
+      // パターン4: 一般的なテーブル構造から抽出
       if (Object.keys(oddsMapping).length === 0) {
-        throw new Error('オッズが取得できませんでした。ページ構造が異なる可能性があります。');
+        const allTables = doc.querySelectorAll('table');
+        allTables.forEach(table => {
+          const rows = table.querySelectorAll('tr');
+          rows.forEach((row, rowIndex) => {
+            // ヘッダー行はスキップ
+            const firstCell = row.querySelector('td:first-child, th:first-child');
+            if (!firstCell || firstCell.tagName === 'TH') {
+              return;
+            }
+
+            // 馬番号を取得（最初のセルから）
+            let horseNum = null;
+            const horseNumText = firstCell.textContent.trim();
+            const numMatch = horseNumText.match(/(\d+)/);
+            if (numMatch) {
+              horseNum = parseInt(numMatch[1]);
+            } else {
+              // 行内の他のセルからも馬番号を探す
+              const allCells = row.querySelectorAll('td');
+              for (const cell of allCells) {
+                const cellText = cell.textContent.trim();
+                const cellNumMatch = cellText.match(/(\d+)番/);
+                if (cellNumMatch) {
+                  horseNum = parseInt(cellNumMatch[1]);
+                  break;
+                }
+              }
+              if (!horseNum) {
+                horseNum = rowIndex; // 行番号から推測
+              }
+            }
+
+            // オッズを探す（各セルをチェック）
+            const cells = row.querySelectorAll('td');
+            cells.forEach(cell => {
+              const text = cell.textContent.trim();
+              // オッズ形式を探す（小数点を含む数値、例: 3.5, 12.8など）
+              const oddsMatches = Array.from(text.matchAll(/(\d+\.\d+)/g));
+              for (const match of oddsMatches) {
+                const odds = parseFloat(match[1]);
+                if (odds > 0 && odds < 1000) {
+                  // 馬番号を特定（セル内に馬番号が含まれている場合）
+                  const cellHorseMatch = cell.textContent.match(/(\d+)番/);
+                  if (cellHorseMatch) {
+                    const cellHorseNum = parseInt(cellHorseMatch[1]);
+                    if (!oddsMapping[cellHorseNum]) {
+                      oddsMapping[cellHorseNum] = odds;
+                    }
+                  } else if (horseNum && !oddsMapping[horseNum]) {
+                    oddsMapping[horseNum] = odds;
+                  }
+                }
+              }
+            });
+          });
+        });
+      }
+      
+      // パターン4.5: テーブル全体から数値パターンを抽出
+      if (Object.keys(oddsMapping).length === 0) {
+        const allTables = doc.querySelectorAll('table');
+        allTables.forEach(table => {
+          const tableText = table.textContent;
+          // オッズパターンを全て抽出
+          const allOddsMatches = Array.from(tableText.matchAll(/(\d+\.\d+)/g));
+          const potentialOdds = allOddsMatches
+            .map(m => parseFloat(m[1]))
+            .filter(odds => odds > 0 && odds < 1000 && odds !== Math.floor(odds)); // 小数点があるもののみ
+            
+          // 馬番号と対応付けを試みる
+          const rows = table.querySelectorAll('tr');
+          rows.forEach((row, rowIndex) => {
+            const rowText = row.textContent;
+            const horseNumMatch = rowText.match(/(\d+)番/);
+            if (horseNumMatch) {
+              const horseNum = parseInt(horseNumMatch[1]);
+              // この行内のオッズを探す
+              const rowOddsMatches = Array.from(rowText.matchAll(/(\d+\.\d+)/g));
+              if (rowOddsMatches.length > 0) {
+                const odds = parseFloat(rowOddsMatches[0][1]);
+                if (odds > 0 && odds < 1000 && !oddsMapping[horseNum]) {
+                  oddsMapping[horseNum] = odds;
+                }
+              }
+            }
+          });
+        });
+      }
+
+      // パターン5: リスト構造から抽出
+      if (Object.keys(oddsMapping).length === 0) {
+        const listItems = doc.querySelectorAll('li, .HorseList li, [class*="Horse"] li');
+        listItems.forEach((item, index) => {
+          const horseNumber = index + 1;
+          const text = item.textContent;
+          // オッズパターンを探す
+          const oddsMatch = text.match(/(\d+\.\d+)/);
+          if (oddsMatch) {
+            const odds = parseFloat(oddsMatch[1]);
+            if (odds > 0 && odds < 1000 && !oddsMapping[horseNumber]) {
+              oddsMapping[horseNumber] = odds;
+            }
+          }
+        });
+      }
+
+      // パターン6: 特定のIDやクラスを持つ要素から抽出
+      if (Object.keys(oddsMapping).length === 0) {
+        const specificSelectors = [
+          '#odds_table',
+          '#tansho_table',
+          '.race_table',
+          '[id*="odds"]',
+          '[id*="Odds"]',
+          '[id*="tansho"]',
+          '[id*="Tansho"]'
+        ];
+
+        for (const selector of specificSelectors) {
+          const container = doc.querySelector(selector);
+          if (container) {
+            // コンテナ内のすべての数値テキストを探す
+            const allText = container.textContent;
+            const oddsMatches = allText.matchAll(/(\d+\.\d+)/g);
+            let horseNum = 1;
+            for (const match of oddsMatches) {
+              const odds = parseFloat(match[1]);
+              if (odds > 0 && odds < 1000 && !oddsMapping[horseNum]) {
+                oddsMapping[horseNum] = odds;
+                horseNum++;
+              }
+            }
+            
+            if (Object.keys(oddsMapping).length > 0) {
+              break;
+            }
+          }
+        }
+      }
+
+      // 取得できたオッズがない場合
+      if (Object.keys(oddsMapping).length === 0) {
+        // デバッグ情報をコンソールに出力
+        const debugInfo = {
+          hasOddsTable: !!doc.querySelector('.Tan_Odds, .OddsTanTable'),
+          hasOddsClass: doc.querySelectorAll('[class*="Odds"], [class*="odds"]').length,
+          hasTable: doc.querySelectorAll('table').length,
+          tableCount: doc.querySelectorAll('table').length,
+          url: targetUrl
+        };
+        
+        console.error('オッズ抽出失敗。デバッグ情報:', debugInfo);
+        console.error('HTMLプレビュー:', html.substring(0, 2000));
+        
+        // HTML内の主要なクラス名をリストアップ
+        const allClasses = [];
+        doc.querySelectorAll('[class]').forEach(el => {
+          const classes = el.className.split(' ').filter(c => c);
+          allClasses.push(...classes);
+        });
+        const uniqueClasses = [...new Set(allClasses)];
+        console.error('検出されたクラス名（最初の20個）:', uniqueClasses.slice(0, 20));
+        
+        throw new Error('オッズが取得できませんでした。ページ構造が異なる可能性があります。ブラウザのコンソール（F12）で詳細を確認してください。');
       }
 
       setIsFetchingOdds(false);
