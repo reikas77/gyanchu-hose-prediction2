@@ -2908,8 +2908,9 @@ const HorseAnalysisApp = () => {
               )}
 
               {oddsFetchMessage && (
-                <div className="mt-4 p-3 rounded-2xl text-sm font-bold border-2 text-center "+
-                  (oddsFetchMessage.startsWith('✅') ? 'bg-green-100 border-green-400 text-green-800' : 'bg-red-100 border-red-400 text-red-800')}>{oddsFetchMessage}</div>
+                <div className={`mt-4 p-3 rounded-2xl text-sm font-bold border-2 text-center ${
+                  oddsFetchMessage.startsWith('✅') ? 'bg-green-100 border-green-400 text-green-800' : 'bg-red-100 border-red-400 text-red-800'
+                }`}>{oddsFetchMessage}</div>
               )}
 
               <div className="mt-6 flex gap-4">
