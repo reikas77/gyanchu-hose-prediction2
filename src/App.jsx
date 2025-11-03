@@ -957,6 +957,38 @@ const HorseAnalysisApp = () => {
     );
   };
 
+  // netkeibaのコピペからオッズを抽出する関数
+  const parseOddsFromNetkeiba = (text) => {
+    const lines = text.trim().split('\n');
+    const oddsMap = {};
+    
+    lines.forEach(line => {
+      // タブ区切りで分割
+      const parts = line.split('\t').map(s => s.trim()).filter(s => s);
+      
+      if (parts.length < 3) return;
+      
+      // 馬番を探す（最初の数字）
+      const horseNumMatch = parts[0].match(/^\d+$/);
+      if (!horseNumMatch) return;
+      
+      const horseNum = parseInt(parts[0]);
+      
+      // オッズは最後の数値部分
+      const lastPart = parts[parts.length - 1];
+      const oddsMatch = lastPart.match(/[\d.]+$/);
+      
+      if (oddsMatch) {
+        const odds = parseFloat(oddsMatch[0]);
+        if (!isNaN(odds) && odds > 0 && odds < 1000) {
+          oddsMap[horseNum] = odds;
+        }
+      }
+    });
+    
+    return oddsMap;
+  };
+
   const calculateWinRate = (horses, courseKey = null) => {
     if (!horses || horses.length === 0) return [];
 
@@ -3353,20 +3385,57 @@ const HorseAnalysisApp = () => {
                 オッズを入力
               </h3>
               
-              <div className="space-y-3 mb-6">
-                {currentRace.horses.sort((a, b) => a.horseNum - b.horseNum).map((horse) => (
-                  <div key={horse.horseNum} className="flex items-center gap-3">
-                    <label className="text-xs font-bold text-gray-700 w-32 truncate">{horse.horseNum}. {horse.name}</label>
-                    <input
-                      type="number"
-                      step="0.1"
-                      value={oddsInput[horse.horseNum] || ''}
-                      onChange={(e) => setOddsInput({...oddsInput, [horse.horseNum]: parseFloat(e.target.value) || 0})}
-                      className="flex-1 px-3 py-2 border-2 border-orange-300 rounded-lg text-xs focus:outline-none focus:border-orange-500"
-                      placeholder="オッズ"
-                    />
-                  </div>
-                ))}
+              {/* 🆕 一括貼り付けセクション */}
+              <div className="mb-6 p-4 bg-gradient-to-r from-blue-50 to-purple-50 rounded-2xl border-2 border-blue-300">
+                <label className="block text-sm font-bold text-gray-700 mb-2">
+                  📋 netkeibaから一括貼り付け
+                </label>
+                <textarea
+                  placeholder="netkeibaの出馬表をコピーしてここに貼り付けてください"
+                  className="w-full h-32 p-3 border-2 border-blue-300 rounded-xl text-sm focus:outline-none focus:border-blue-500 font-mono"
+                  onPaste={(e) => {
+                    const pastedText = e.clipboardData.getData('text');
+                    const extractedOdds = parseOddsFromNetkeiba(pastedText);
+                    
+                    if (Object.keys(extractedOdds).length > 0) {
+                      setOddsInput(extractedOdds);
+                      e.target.value = '';
+                      
+                      // 成功メッセージを表示
+                      const message = `✅ ${Object.keys(extractedOdds).length}頭分のオッズを抽出しました！`;
+                      window.alert(message);
+                    } else {
+                      window.alert('❌ オッズを抽出できませんでした。形式を確認してください。');
+                    }
+                  }}
+                />
+                <p className="text-xs text-gray-600 mt-2">
+                  💡 netkeibaの出馬表ページで全選択（Ctrl+A / Cmd+A）してコピーし、上の欄に貼り付けてください
+                </p>
+              </div>
+
+              {/* 既存の手動入力セクション */}
+              <div className="mb-6">
+                <label className="block text-sm font-bold text-gray-700 mb-3">
+                  ✏️ 個別に編集
+                </label>
+                <div className="space-y-3">
+                  {currentRace.horses.sort((a, b) => a.horseNum - b.horseNum).map((horse) => (
+                    <div key={horse.horseNum} className="flex items-center gap-3">
+                      <label className="text-xs font-bold text-gray-700 w-32 truncate">
+                        {horse.horseNum}. {horse.name}
+                      </label>
+                      <input
+                        type="number"
+                        step="0.1"
+                        value={oddsInput[horse.horseNum] || ''}
+                        onChange={(e) => setOddsInput({...oddsInput, [horse.horseNum]: parseFloat(e.target.value) || 0})}
+                        className="flex-1 px-3 py-2 border-2 border-orange-300 rounded-lg text-xs focus:outline-none focus:border-orange-500"
+                        placeholder="オッズ"
+                      />
+                    </div>
+                  ))}
+                </div>
               </div>
 
               <div className="flex gap-4">
