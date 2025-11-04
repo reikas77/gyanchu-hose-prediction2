@@ -277,6 +277,10 @@ const HorseAnalysisApp = () => {
   const [newRaceName, setNewRaceName] = useState('');
   const [showEditCourseModal, setShowEditCourseModal] = useState(false);
   const [editingCourseKey, setEditingCourseKey] = useState(null);
+  
+  // ✏️ レース編集関連のstate
+  const [showEditRaceModal, setShowEditRaceModal] = useState(false);
+  const [editingRaceData, setEditingRaceData] = useState(null);
 
   // 🔒 パスコード関連のstate
   const [racePasscode, setRacePasscode] = useState('');
@@ -1868,11 +1872,29 @@ const HorseAnalysisApp = () => {
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
+                              const raceData = races.find(r => r.firebaseId === race.firebaseId);
+                              setEditingRaceData({
+                                firebaseId: race.firebaseId,
+                                name: raceData?.name || '',
+                                startTime: raceData?.startTime || '',
+                                confidence: raceData?.confidence || 3,
+                                passcode: raceData?.passcode || '',
+                                courseKey: raceData?.courseKey || ''
+                              });
+                              setShowEditRaceModal(true);
+                            }}
+                            className="flex-1 px-2 py-1 bg-purple-400 text-white rounded-full text-xs font-bold hover:bg-purple-500 transition"
+                          >
+                            ✏️ 編集
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
                               handleRenameRace(race.firebaseId, race.name);
                             }}
                             className="flex-1 px-2 py-1 bg-blue-400 text-white rounded-full text-xs font-bold hover:bg-blue-500 transition"
                           >
-                            ✏️ 名称
+                            📝 名称
                           </button>
                           <button
                             onClick={(e) => {
@@ -2744,6 +2766,161 @@ const HorseAnalysisApp = () => {
                     onClick={() => {
                       setShowRenameModal(false);
                       setNewRaceName('');
+                    }}
+                    className="flex-1 px-4 py-3 bg-gray-300 text-gray-800 rounded-full font-bold hover:bg-gray-400 transition"
+                  >
+                    キャンセル
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ✏️ レース編集モーダル */}
+          {showEditRaceModal && isAdmin && editingRaceData && (
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+              <div className="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl max-h-[90vh] overflow-y-auto">
+                <h3 className="text-xl font-bold mb-6 text-gray-800 flex items-center gap-2">
+                  <CrownPixelArt size={24} />
+                  レース情報を編集
+                </h3>
+                
+                {/* レース名 */}
+                <div className="mb-4">
+                  <label className="block text-sm font-bold text-gray-700 mb-2">レース名</label>
+                  <input
+                    type="text"
+                    value={editingRaceData.name || ''}
+                    onChange={(e) => setEditingRaceData({...editingRaceData, name: e.target.value})}
+                    className="w-full px-4 py-3 border-2 border-purple-300 rounded-2xl focus:outline-none focus:border-purple-500"
+                  />
+                </div>
+
+                {/* 発走時刻 */}
+                <div className="mb-4">
+                  <label className="block text-sm font-bold text-gray-700 mb-2">🕐 発走時刻</label>
+                  <input
+                    type="datetime-local"
+                    value={editingRaceData.startTime ? new Date(editingRaceData.startTime).toISOString().slice(0, 16) : ''}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      setEditingRaceData({
+                        ...editingRaceData, 
+                        startTime: value ? new Date(value).toISOString() : null
+                      });
+                    }}
+                    className="w-full px-4 py-3 border-2 border-purple-300 rounded-2xl focus:outline-none focus:border-purple-500"
+                  />
+                </div>
+
+                {/* 自信度 */}
+                <div className="mb-4">
+                  <label className="block text-sm font-bold text-gray-700 mb-2">⭐ 自信度</label>
+                  <div className="flex gap-2">
+                    {[1, 2, 3, 4, 5].map((star) => (
+                      <button
+                        key={star}
+                        onClick={() => setEditingRaceData({...editingRaceData, confidence: star})}
+                        className={`flex-1 py-2 rounded-xl font-bold transition ${
+                          editingRaceData.confidence === star
+                            ? 'bg-yellow-400 text-white shadow-lg'
+                            : 'bg-gray-200 text-gray-600 hover:bg-gray-300'
+                        }`}
+                      >
+                        {'★'.repeat(star)}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* パスコード */}
+                <div className="mb-4">
+                  <label className="block text-sm font-bold text-gray-700 mb-2 flex items-center gap-2">
+                    <LockPixelArt size={20} />
+                    パスコード（6桁の数字）
+                  </label>
+                  <input
+                    type="text"
+                    value={editingRaceData.passcode || ''}
+                    onChange={(e) => {
+                      const value = e.target.value.replace(/\D/g, '').slice(0, 6);
+                      setEditingRaceData({
+                        ...editingRaceData, 
+                        passcode: value ? value : null
+                      });
+                    }}
+                    placeholder="空欄で解除（誰でも閲覧可）"
+                    maxLength={6}
+                    className="w-full px-4 py-3 border-2 border-purple-300 rounded-2xl focus:outline-none focus:border-purple-500 font-mono text-lg tracking-widest"
+                  />
+                  <p className="text-xs text-gray-600 mt-2">
+                    {editingRaceData.passcode 
+                      ? `🔒 パスコード設定中（${editingRaceData.passcode.length}/6桁）`
+                      : '🔓 パスコードなし（誰でも閲覧可）'
+                    }
+                  </p>
+                </div>
+
+                {/* コース設定 */}
+                <div className="mb-6">
+                  <label className="block text-sm font-bold text-gray-700 mb-2">コース設定</label>
+                  <select
+                    value={editingRaceData.courseKey || ''}
+                    onChange={(e) => setEditingRaceData({...editingRaceData, courseKey: e.target.value || null})}
+                    className="w-full px-4 py-3 border-2 border-purple-300 rounded-2xl focus:outline-none focus:border-purple-500"
+                  >
+                    <option value="">デフォルト設定を使用</option>
+                    {Object.keys(courseSettings).map(name => (
+                      <option key={name} value={name}>{name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* 保存・キャンセルボタン */}
+                <div className="flex gap-4">
+                  <button
+                    onClick={() => {
+                      // バリデーション
+                      if (!editingRaceData.name.trim()) {
+                        window.alert('レース名を入力してください');
+                        return;
+                      }
+                      
+                      if (editingRaceData.passcode && editingRaceData.passcode.length !== 6) {
+                        window.alert('パスコードは6桁で入力してください');
+                        return;
+                      }
+                      
+                      // Firebaseに保存（既存データを保持したまま、指定項目のみ更新）
+                      const raceRef = ref(database, `races/${editingRaceData.firebaseId}`);
+                      const currentRace = races.find(r => r.firebaseId === editingRaceData.firebaseId);
+                      if (currentRace) {
+                        const updatedRace = {
+                          ...currentRace,
+                          name: editingRaceData.name.trim(),
+                          startTime: editingRaceData.startTime || null,
+                          confidence: editingRaceData.confidence || 3,
+                          passcode: editingRaceData.passcode || null,
+                          courseKey: editingRaceData.courseKey || null
+                        };
+                        set(raceRef, updatedRace).then(() => {
+                          window.alert('✅ 保存しました');
+                          setShowEditRaceModal(false);
+                          setEditingRaceData(null);
+                        }).catch((error) => {
+                          console.error('保存エラー:', error);
+                          window.alert('❌ 保存に失敗しました');
+                        });
+                      }
+                    }}
+                    className="flex-1 px-4 py-3 bg-gradient-to-r from-purple-400 to-purple-500 text-white rounded-full font-bold shadow-lg hover:shadow-2xl transition"
+                  >
+                    保存
+                  </button>
+                  <button
+                    onClick={() => {
+                      setShowEditRaceModal(false);
+                      setEditingRaceData(null);
                     }}
                     className="flex-1 px-4 py-3 bg-gray-300 text-gray-800 rounded-full font-bold hover:bg-gray-400 transition"
                   >
