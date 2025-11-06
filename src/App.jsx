@@ -298,6 +298,20 @@ const HorseAnalysisApp = () => {
   const [upcomingSortBy, setUpcomingSortBy] = useState('startTime'); // 'startTime' or 'createdAt'
   const [pastSortBy, setPastSortBy] = useState('newest'); // 'newest' or 'oldest'
   const [pastFilterCourse, setPastFilterCourse] = useState(null); // コースフィルター
+  
+  // 高度フィルター用のstate
+  const [showAdvancedFilterModal, setShowAdvancedFilterModal] = useState(false);
+  const [advancedFilters, setAdvancedFilters] = useState({
+    gapsAbove3: false,      // 勝率上位3頭の下に断層
+    gaps2Plus: false,       // 断層2つ以上
+    gaps3Plus: false,       // 断層3つ以上
+    hasExpectation: false,  // 期待値150以上の馬あり
+    hasSuperExp: false,     // 超期待値220以上の馬あり
+    hasAiRec: false,        // AIおすすめ馬あり
+    tanshoHit: false,       // 単勝的中
+    fukushoHit: false,      // 複勝的中
+    miss: false             // 不的中
+  });
 
   // 勝率ランキングの印機能用のstate
   const [horseMarks, setHorseMarks] = useState({}); // { horseNum: mark } の形式
@@ -1119,10 +1133,11 @@ const HorseAnalysisApp = () => {
     return ranking;
   };
 
-  const calculateAIRecommendation = (horses) => {
+  const calculateAIRecommendation = (horses, odds = null) => {
+    const oddsToUse = odds || oddsInput;
     const candidates = horses.filter(horse => {
-      const odds = oddsInput[horse.horseNum] || 0;
-      const value = odds * horse.winRate;
+      const horseOdds = oddsToUse[horse.horseNum] || 0;
+      const value = horseOdds * horse.winRate;
       return value >= 100 && horse.winRate >= 10;
     });
     
@@ -1763,6 +1778,101 @@ const HorseAnalysisApp = () => {
     return gaps;
   };
 
+  // 🔍 レースが高度フィルター条件を満たすか判定する関数
+  const checkAdvancedFilter = (race) => {
+    if (!race || !race.horses) return false;
+    
+    // フィルターが1つも選択されていない場合は全て表示
+    const hasAnyFilter = Object.values(advancedFilters).some(v => v === true);
+    if (!hasAnyFilter) return true;
+    
+    // 各条件をチェック（AND条件）
+    let matchesAll = true;
+    
+    // 断層関連の判定
+    if (advancedFilters.gapsAbove3 || advancedFilters.gaps2Plus || advancedFilters.gaps3Plus) {
+      const winRates = calculateWinRate(race.horses, race.courseKey);
+      const gaps = detectWinRateGaps(winRates);
+      
+      // 勝率上位3頭の下に断層がある
+      if (advancedFilters.gapsAbove3) {
+        const hasGapAbove3 = gaps.some(gapIndex => gapIndex < 3);
+        if (!hasGapAbove3) matchesAll = false;
+      }
+      
+      // 断層が2つ以上
+      if (advancedFilters.gaps2Plus) {
+        if (gaps.length < 2) matchesAll = false;
+      }
+      
+      // 断層が3つ以上
+      if (advancedFilters.gaps3Plus) {
+        if (gaps.length < 3) matchesAll = false;
+      }
+    }
+    
+    // 期待値馬関連の判定
+    if (advancedFilters.hasExpectation || advancedFilters.hasSuperExp || advancedFilters.hasAiRec) {
+      const winRates = calculateWinRate(race.horses, race.courseKey);
+      const odds = race.odds || {};
+      
+      // 期待値150以上の馬がいる
+      if (advancedFilters.hasExpectation) {
+        const hasExp = winRates.some(horse => {
+          const horseOdds = odds[horse.horseNum] || 0;
+          const value = horseOdds * horse.winRate;
+          return value >= 150 && horse.winRate >= 10;
+        });
+        if (!hasExp) matchesAll = false;
+      }
+      
+      // 超期待値220以上の馬がいる
+      if (advancedFilters.hasSuperExp) {
+        const hasSuperExp = winRates.some(horse => {
+          const horseOdds = odds[horse.horseNum] || 0;
+          const value = horseOdds * horse.winRate;
+          return value >= 220 && horse.winRate >= 10;
+        });
+        if (!hasSuperExp) matchesAll = false;
+      }
+      
+      // AIおすすめ馬がいる
+      if (advancedFilters.hasAiRec) {
+        const aiRec = calculateAIRecommendation(winRates, odds);
+        if (!aiRec) matchesAll = false;
+      }
+    }
+    
+    // 結果関連の判定
+    if (advancedFilters.tanshoHit || advancedFilters.fukushoHit || advancedFilters.miss) {
+      if (!race.result) {
+        // 結果が記録されていない場合は結果関連のフィルターは全てfalse
+        if (advancedFilters.tanshoHit || advancedFilters.fukushoHit || advancedFilters.miss) {
+          matchesAll = false;
+        }
+      } else {
+        // 単勝的中
+        if (advancedFilters.tanshoHit) {
+          if (race.result.tansho !== 'hit') matchesAll = false;
+        }
+        
+        // 複勝的中
+        if (advancedFilters.fukushoHit) {
+          if (race.result.fukusho !== 'hit') matchesAll = false;
+        }
+        
+        // 不的中（単勝も複勝も外れた）
+        if (advancedFilters.miss) {
+          if (race.result.tansho === 'hit' || race.result.fukusho === 'hit') {
+            matchesAll = false;
+          }
+        }
+      }
+    }
+    
+    return matchesAll;
+  };
+
   if (isLoading) {
     return (
       <div className="w-full min-h-screen bg-gradient-to-br from-pink-100 via-purple-50 to-blue-100 flex items-center justify-center">
@@ -1920,54 +2030,112 @@ const HorseAnalysisApp = () => {
                     </div>
                   )}
                   {activeTab === 'races-past' && (
-                    <div className="mb-4 flex gap-2 items-center flex-wrap">
-                      <span className="text-xs md:text-sm font-bold text-gray-700">ソート:</span>
-                      <button
-                        onClick={() => setPastSortBy('newest')}
-                        className={`px-3 py-1.5 rounded-full text-xs md:text-sm font-bold transition ${
-                          pastSortBy === 'newest'
-                            ? 'bg-purple-400 text-white'
-                            : 'bg-gray-200 text-gray-800 hover:bg-gray-300'
-                        }`}
-                      >
-                        新しい順
-                      </button>
-                      <button
-                        onClick={() => setPastSortBy('oldest')}
-                        className={`px-3 py-1.5 rounded-full text-xs md:text-sm font-bold transition ${
-                          pastSortBy === 'oldest'
-                            ? 'bg-purple-400 text-white'
-                            : 'bg-gray-200 text-gray-800 hover:bg-gray-300'
-                        }`}
-                      >
-                        古い順
-                      </button>
-                      <span className="text-xs md:text-sm font-bold text-gray-700 ml-2">コース:</span>
-                      <button
-                        onClick={() => setPastFilterCourse(null)}
-                        className={`px-3 py-1.5 rounded-full text-xs md:text-sm font-bold transition ${
-                          pastFilterCourse === null
-                            ? 'bg-purple-400 text-white'
-                            : 'bg-gray-200 text-gray-800 hover:bg-gray-300'
-                        }`}
-                      >
-                        全て
-                      </button>
-                      {Array.from(new Set(races.filter(r => r.result && r.courseKey).map(r => r.courseKey))).sort().map(course => (
+                    <div className="mb-4 space-y-3">
+                      <div className="flex gap-2 items-center flex-wrap">
+                        <span className="text-xs md:text-sm font-bold text-gray-700">ソート:</span>
                         <button
-                          key={course}
-                          onClick={() => setPastFilterCourse(course)}
+                          onClick={() => setPastSortBy('newest')}
                           className={`px-3 py-1.5 rounded-full text-xs md:text-sm font-bold transition ${
-                            pastFilterCourse === course
+                            pastSortBy === 'newest'
                               ? 'bg-purple-400 text-white'
                               : 'bg-gray-200 text-gray-800 hover:bg-gray-300'
                           }`}
                         >
-                          {course}
+                          新しい順
                         </button>
-                      ))}
+                        <button
+                          onClick={() => setPastSortBy('oldest')}
+                          className={`px-3 py-1.5 rounded-full text-xs md:text-sm font-bold transition ${
+                            pastSortBy === 'oldest'
+                              ? 'bg-purple-400 text-white'
+                              : 'bg-gray-200 text-gray-800 hover:bg-gray-300'
+                          }`}
+                        >
+                          古い順
+                        </button>
+                        <span className="text-xs md:text-sm font-bold text-gray-700 ml-2">コース:</span>
+                        <button
+                          onClick={() => setPastFilterCourse(null)}
+                          className={`px-3 py-1.5 rounded-full text-xs md:text-sm font-bold transition ${
+                            pastFilterCourse === null
+                              ? 'bg-purple-400 text-white'
+                              : 'bg-gray-200 text-gray-800 hover:bg-gray-300'
+                          }`}
+                        >
+                          全て
+                        </button>
+                        {Array.from(new Set(races.filter(r => r.result && r.courseKey).map(r => r.courseKey))).sort().map(course => (
+                          <button
+                            key={course}
+                            onClick={() => setPastFilterCourse(course)}
+                            className={`px-3 py-1.5 rounded-full text-xs md:text-sm font-bold transition ${
+                              pastFilterCourse === course
+                                ? 'bg-purple-400 text-white'
+                                : 'bg-gray-200 text-gray-800 hover:bg-gray-300'
+                            }`}
+                          >
+                            {course}
+                          </button>
+                        ))}
+                      </div>
+                      {isAdmin && (
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => setShowAdvancedFilterModal(true)}
+                            className={`px-4 py-2 rounded-full text-xs md:text-sm font-bold transition flex items-center gap-2 ${
+                              Object.values(advancedFilters).some(v => v === true)
+                                ? 'bg-gradient-to-r from-pink-400 to-purple-500 text-white shadow-lg'
+                                : 'bg-gray-200 text-gray-800 hover:bg-gray-300'
+                            }`}
+                          >
+                            🔍 詳細検索
+                            {Object.values(advancedFilters).some(v => v === true) && (
+                              <span className="px-2 py-0.5 bg-white text-purple-600 rounded-full text-xs font-bold">
+                                {Object.values(advancedFilters).filter(v => v === true).length}
+                              </span>
+                            )}
+                          </button>
+                          {Object.values(advancedFilters).some(v => v === true) && (
+                            <button
+                              onClick={() => {
+                                setAdvancedFilters({
+                                  gapsAbove3: false,
+                                  gaps2Plus: false,
+                                  gaps3Plus: false,
+                                  hasExpectation: false,
+                                  hasSuperExp: false,
+                                  hasAiRec: false,
+                                  tanshoHit: false,
+                                  fukushoHit: false,
+                                  miss: false
+                                });
+                              }}
+                              className="px-3 py-2 rounded-full text-xs md:text-sm font-bold bg-gray-300 text-gray-800 hover:bg-gray-400 transition"
+                            >
+                              リセット
+                            </button>
+                          )}
+                        </div>
+                      )}
                     </div>
                   )}
+                
+                {/* 該当件数表示（過去の予想タブで高度フィルター適用時） */}
+                {activeTab === 'races-past' && isAdmin && Object.values(advancedFilters).some(v => v === true) && (
+                  <div className="mb-4 p-3 bg-gradient-to-r from-purple-100 to-pink-100 rounded-2xl border-2 border-purple-300">
+                    <p className="text-sm font-bold text-purple-800 text-center">
+                      {(() => {
+                        let past = races.filter(r => r.result);
+                        if (pastFilterCourse) {
+                          past = past.filter(r => r.courseKey === pastFilterCourse);
+                        }
+                        past = past.filter(race => checkAdvancedFilter(race));
+                        return past.length;
+                      })()}件のレースが該当
+                    </p>
+                  </div>
+                )}
+
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
                   {(activeTab === 'races-upcoming' 
                     ? (() => {
@@ -1991,6 +2159,10 @@ const HorseAnalysisApp = () => {
                         let past = races.filter(r => r.result);
                         if (pastFilterCourse) {
                           past = past.filter(r => r.courseKey === pastFilterCourse);
+                        }
+                        // 高度フィルターを適用
+                        if (isAdmin) {
+                          past = past.filter(race => checkAdvancedFilter(race));
                         }
                         if (pastSortBy === 'newest') {
                           return past.sort((a, b) => {
@@ -2309,6 +2481,165 @@ const HorseAnalysisApp = () => {
                   {statsType === 'winrate' && '結果が記録されたレースがありません'}
                 </p>
               )}
+            </div>
+          )}
+
+          {/* 🔍 詳細検索モーダル（過去レースの高度フィルター） */}
+          {showAdvancedFilterModal && isAdmin && (
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+              <div className="bg-white rounded-3xl p-6 md:p-8 max-w-2xl w-full shadow-2xl max-h-[90vh] overflow-y-auto">
+                <div className="flex items-center gap-3 mb-6">
+                  <span className="text-2xl">🔍</span>
+                  <h2 className="text-xl md:text-2xl font-bold text-gray-800">詳細検索</h2>
+                </div>
+
+                <div className="space-y-6">
+                  {/* 断層関連 */}
+                  <div>
+                    <h3 className="text-base md:text-lg font-bold text-gray-700 mb-3 flex items-center gap-2">
+                      <span>📊</span>
+                      断層関連
+                    </h3>
+                    <div className="space-y-2 pl-6">
+                      <label className="flex items-center gap-3 cursor-pointer p-2 hover:bg-purple-50 rounded-lg transition">
+                        <input
+                          type="checkbox"
+                          checked={advancedFilters.gapsAbove3}
+                          onChange={(e) => setAdvancedFilters({ ...advancedFilters, gapsAbove3: e.target.checked })}
+                          className="w-5 h-5 accent-purple-500"
+                        />
+                        <span className="text-sm font-bold text-gray-700">勝率上位3頭の下に断層がある</span>
+                      </label>
+                      <label className="flex items-center gap-3 cursor-pointer p-2 hover:bg-purple-50 rounded-lg transition">
+                        <input
+                          type="checkbox"
+                          checked={advancedFilters.gaps2Plus}
+                          onChange={(e) => setAdvancedFilters({ ...advancedFilters, gaps2Plus: e.target.checked })}
+                          className="w-5 h-5 accent-purple-500"
+                        />
+                        <span className="text-sm font-bold text-gray-700">断層が2つ以上ある</span>
+                      </label>
+                      <label className="flex items-center gap-3 cursor-pointer p-2 hover:bg-purple-50 rounded-lg transition">
+                        <input
+                          type="checkbox"
+                          checked={advancedFilters.gaps3Plus}
+                          onChange={(e) => setAdvancedFilters({ ...advancedFilters, gaps3Plus: e.target.checked })}
+                          className="w-5 h-5 accent-purple-500"
+                        />
+                        <span className="text-sm font-bold text-gray-700">断層が3つ以上ある</span>
+                      </label>
+                    </div>
+                  </div>
+
+                  {/* 期待値馬関連 */}
+                  <div>
+                    <h3 className="text-base md:text-lg font-bold text-gray-700 mb-3 flex items-center gap-2">
+                      <span>⭐</span>
+                      期待値馬関連
+                    </h3>
+                    <div className="space-y-2 pl-6">
+                      <label className="flex items-center gap-3 cursor-pointer p-2 hover:bg-yellow-50 rounded-lg transition">
+                        <input
+                          type="checkbox"
+                          checked={advancedFilters.hasExpectation}
+                          onChange={(e) => setAdvancedFilters({ ...advancedFilters, hasExpectation: e.target.checked })}
+                          className="w-5 h-5 accent-yellow-500"
+                        />
+                        <span className="text-sm font-bold text-gray-700">期待値150以上の馬がいる</span>
+                      </label>
+                      <label className="flex items-center gap-3 cursor-pointer p-2 hover:bg-yellow-50 rounded-lg transition">
+                        <input
+                          type="checkbox"
+                          checked={advancedFilters.hasSuperExp}
+                          onChange={(e) => setAdvancedFilters({ ...advancedFilters, hasSuperExp: e.target.checked })}
+                          className="w-5 h-5 accent-yellow-500"
+                        />
+                        <span className="text-sm font-bold text-gray-700">超期待値馬（220以上）がいる</span>
+                      </label>
+                      <label className="flex items-center gap-3 cursor-pointer p-2 hover:bg-yellow-50 rounded-lg transition">
+                        <input
+                          type="checkbox"
+                          checked={advancedFilters.hasAiRec}
+                          onChange={(e) => setAdvancedFilters({ ...advancedFilters, hasAiRec: e.target.checked })}
+                          className="w-5 h-5 accent-yellow-500"
+                        />
+                        <span className="text-sm font-bold text-gray-700">AIおすすめ馬がいる</span>
+                      </label>
+                    </div>
+                  </div>
+
+                  {/* 結果関連 */}
+                  <div>
+                    <h3 className="text-base md:text-lg font-bold text-gray-700 mb-3 flex items-center gap-2">
+                      <span>🏆</span>
+                      結果関連
+                    </h3>
+                    <div className="space-y-2 pl-6">
+                      <label className="flex items-center gap-3 cursor-pointer p-2 hover:bg-green-50 rounded-lg transition">
+                        <input
+                          type="checkbox"
+                          checked={advancedFilters.tanshoHit}
+                          onChange={(e) => setAdvancedFilters({ ...advancedFilters, tanshoHit: e.target.checked })}
+                          className="w-5 h-5 accent-green-500"
+                        />
+                        <span className="text-sm font-bold text-gray-700">単勝的中したレース</span>
+                      </label>
+                      <label className="flex items-center gap-3 cursor-pointer p-2 hover:bg-green-50 rounded-lg transition">
+                        <input
+                          type="checkbox"
+                          checked={advancedFilters.fukushoHit}
+                          onChange={(e) => setAdvancedFilters({ ...advancedFilters, fukushoHit: e.target.checked })}
+                          className="w-5 h-5 accent-green-500"
+                        />
+                        <span className="text-sm font-bold text-gray-700">複勝的中したレース</span>
+                      </label>
+                      <label className="flex items-center gap-3 cursor-pointer p-2 hover:bg-red-50 rounded-lg transition">
+                        <input
+                          type="checkbox"
+                          checked={advancedFilters.miss}
+                          onChange={(e) => setAdvancedFilters({ ...advancedFilters, miss: e.target.checked })}
+                          className="w-5 h-5 accent-red-500"
+                        />
+                        <span className="text-sm font-bold text-gray-700">不的中レース</span>
+                      </label>
+                    </div>
+                  </div>
+
+                  {/* 説明 */}
+                  <div className="p-4 bg-purple-100 rounded-2xl border-2 border-purple-300">
+                    <p className="text-xs md:text-sm text-purple-800 font-bold">
+                      💡 複数の条件を選択した場合、全ての条件を満たすレース（AND条件）が表示されます。
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex gap-4 mt-6">
+                  <button
+                    onClick={() => setShowAdvancedFilterModal(false)}
+                    className="flex-1 px-6 py-3 bg-gradient-to-r from-purple-400 to-purple-500 text-white rounded-full font-bold shadow-lg hover:shadow-2xl hover:scale-105 transition transform"
+                  >
+                    適用
+                  </button>
+                  <button
+                    onClick={() => {
+                      setAdvancedFilters({
+                        gapsAbove3: false,
+                        gaps2Plus: false,
+                        gaps3Plus: false,
+                        hasExpectation: false,
+                        hasSuperExp: false,
+                        hasAiRec: false,
+                        tanshoHit: false,
+                        fukushoHit: false,
+                        miss: false
+                      });
+                    }}
+                    className="flex-1 px-6 py-3 bg-gray-300 text-gray-800 rounded-full font-bold hover:bg-gray-400 transition"
+                  >
+                    リセット
+                  </button>
+                </div>
+              </div>
             </div>
           )}
 
