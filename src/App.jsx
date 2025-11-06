@@ -1488,8 +1488,16 @@ const HorseAnalysisApp = () => {
       if (expAboveGap.length > 0) {
         // A案: 3連単フォーメーション
         const firstHorse = expAboveGap[0].horseNum;
-        const secondHorses = aboveGap.map(h => h.horseNum).join(',');
-        const thirdHorses = aboveGap.map(h => h.horseNum).join(',');
+        // 2着: 断層の上の馬すべて（1着を除く）
+        const secondHorses = aboveGap
+          .filter(h => h.horseNum !== firstHorse)
+          .map(h => h.horseNum)
+          .join(',');
+        // 3着: 断層の上の馬すべて（1着を除く）
+        const thirdHorses = aboveGap
+          .filter(h => h.horseNum !== firstHorse)
+          .map(h => h.horseNum)
+          .join(',');
         const pointsA = calculateBetPoints('3連単フォーメーション', [
           `1着: ${firstHorse}`,
           `2着: ${secondHorses}`,
@@ -1505,12 +1513,29 @@ const HorseAnalysisApp = () => {
         };
         
       // B案: 3連複フォーメーション
-      const axis1 = expAboveGap[0].horseNum;
-      const axis2 = expAboveGap.length > 1 ? expAboveGap[1].horseNum : expAboveGap[0].horseNum;
-      const opponent = aboveGap.map(h => h.horseNum).join(',');
-      // 軸1と軸2が異なる場合: 1 × 1 × 相手
-      // 軸1と軸2が同じ場合: 1C2 × 相手 = 0（ありえない）
-      const opponentCount = aboveGap.length;
+      let axis1, axis2;
+      if (expAboveGap.length >= 2) {
+        // 期待値馬が2頭以上: 最も勝率の高い期待値馬と2番目
+        axis1 = expAboveGap[0].horseNum;
+        axis2 = expAboveGap[1].horseNum;
+      } else if (expAboveGap.length === 1) {
+        // 期待値馬が1頭のみ: 期待値馬と勝率2位の馬
+        axis1 = expAboveGap[0].horseNum;
+        const aboveGapWithoutAxis1 = aboveGap.filter(h => h.horseNum !== axis1);
+        axis2 = aboveGapWithoutAxis1.length > 0 ? aboveGapWithoutAxis1[0].horseNum : axis1;
+      } else {
+        // 期待値馬がいない場合（通常はここには来ない）
+        axis1 = aboveGap[0]?.horseNum;
+        axis2 = aboveGap[1]?.horseNum || axis1;
+      }
+      
+      // 相手馬から軸馬を除外
+      const opponent = aboveGap
+        .filter(h => h.horseNum !== axis1 && h.horseNum !== axis2)
+        .map(h => h.horseNum)
+        .join(',');
+      
+      const opponentCount = aboveGap.filter(h => h.horseNum !== axis1 && h.horseNum !== axis2).length;
       const pointsB = (axis1 === axis2 ? 0 : 1 * opponentCount);
       planB = {
         type: '3連複フォーメーション',
@@ -1542,8 +1567,16 @@ const HorseAnalysisApp = () => {
       const aboveSecondGap = resultsWithRate.slice(0, secondGapIndex + 1);
       
       // A案: 3連単フォーメーション
-      const secondHorses = winRate5Plus.map(h => h.horseNum).join(',');
-      const thirdHorses = winRate5Plus.map(h => h.horseNum).join(',');
+      // 2着: 勝率5%以上の馬（1着を除く）
+      const secondHorses = winRate5Plus
+        .filter(h => h.horseNum !== top1.horseNum)
+        .map(h => h.horseNum)
+        .join(',');
+      // 3着: 勝率5%以上の馬（1着を除く）
+      const thirdHorses = winRate5Plus
+        .filter(h => h.horseNum !== top1.horseNum)
+        .map(h => h.horseNum)
+        .join(',');
       const pointsA = calculateBetPoints('3連単フォーメーション', [
         `1着: ${top1.horseNum}`,
         `2着: ${secondHorses}`,
@@ -1559,7 +1592,11 @@ const HorseAnalysisApp = () => {
       };
       
       // B案: 3連単フォーメーション
-      const secondHorsesB = aboveSecondGap.map(h => h.horseNum).join(',');
+      // 2着: 2つ目の断層より上の馬（1着を除く）
+      const secondHorsesB = aboveSecondGap
+        .filter(h => h.horseNum !== top1.horseNum)
+        .map(h => h.horseNum)
+        .join(',');
       const pointsB = calculateBetPoints('3連単フォーメーション', [
         `1着: ${top1.horseNum}`,
         `2着: ${secondHorsesB}`,
@@ -1592,7 +1629,11 @@ const HorseAnalysisApp = () => {
       const top345 = resultsWithRate.slice(2, 5);
       
       // A案: 3連単フォーメーション
-      const thirdHorses = winRate5Plus.map(h => h.horseNum).join(',');
+      // 3着: 勝率5%以上の馬（1着、2着を除く）
+      const thirdHorses = winRate5Plus
+        .filter(h => h.horseNum !== top1.horseNum && h.horseNum !== top2.horseNum)
+        .map(h => h.horseNum)
+        .join(',');
       const pointsA = calculateBetPoints('3連単フォーメーション', [
         `1着: ${top1.horseNum}`,
         `2着: ${top2.horseNum}`,
@@ -1608,7 +1649,11 @@ const HorseAnalysisApp = () => {
       };
       
       // B案: 3連単フォーメーション
-      const thirdHorsesB = top345.map(h => h.horseNum).join(',');
+      // 3着: 3,4,5位（1着、2着を除く）
+      const thirdHorsesB = top345
+        .filter(h => h.horseNum !== top1.horseNum && h.horseNum !== top2.horseNum)
+        .map(h => h.horseNum)
+        .join(',');
       const pointsB = calculateBetPoints('3連単フォーメーション', [
         `1着: ${top1.horseNum}`,
         `2着: ${top2.horseNum}`,
@@ -1637,13 +1682,17 @@ const HorseAnalysisApp = () => {
     else if (gaps.length >= 3) {
       const top2 = resultsWithRate.slice(0, 2);
       const top2Nums = top2.map(h => h.horseNum).join(',');
-      const allNonCutoff = nonCutoffFailedHorses.map(h => h.horseNum).join(',');
+      // ヒモ: 基準未達以外すべて（軸馬を除く）
+      const allNonCutoff = nonCutoffFailedHorses
+        .filter(h => h.horseNum !== top2[0].horseNum && h.horseNum !== top2[1].horseNum)
+        .map(h => h.horseNum)
+        .join(',');
       
       // A案: 3連単フォーメーション
-      // 軸: 勝率1,2位（2頭）、相手: 勝率1,2位（2頭）、ヒモ: 基準未達以外すべて
+      // 軸: 勝率1,2位（2頭）、相手: 勝率1,2位（2頭）、ヒモ: 基準未達以外すべて（軸馬を除く）
       const axisCount = 2;
       const opponentCount = 2;
-      const himoCount = nonCutoffFailedHorses.length;
+      const himoCount = nonCutoffFailedHorses.filter(h => h.horseNum !== top2[0].horseNum && h.horseNum !== top2[1].horseNum).length;
       const pointsA = axisCount * opponentCount * himoCount;
       planA = {
         type: '3連単フォーメーション',
@@ -1699,12 +1748,29 @@ const HorseAnalysisApp = () => {
       };
       
       // B案: 3連複フォーメーション
-      const axis1 = expWinRate10Plus.length > 0 ? expWinRate10Plus[0].horseNum : winRate10Plus[0]?.horseNum;
-      const axis2 = expWinRate10Plus.length > 1 ? expWinRate10Plus[1].horseNum : (expWinRate10Plus.length > 0 ? expWinRate10Plus[0].horseNum : winRate10Plus[1]?.horseNum);
-      const opponent = winRate10Nums;
-      // 軸1と軸2が異なる場合: 1 × 1 × 相手
-      // 軸1と軸2が同じ場合: 1C2 × 相手 = 0（ありえない）
-      const opponentCount = winRate10Plus.length;
+      let axis1, axis2;
+      if (expWinRate10Plus.length >= 2) {
+        // 期待値馬が2頭以上: 最も勝率の高い期待値馬と2番目
+        axis1 = expWinRate10Plus[0].horseNum;
+        axis2 = expWinRate10Plus[1].horseNum;
+      } else if (expWinRate10Plus.length === 1) {
+        // 期待値馬が1頭のみ: 期待値馬と勝率10%以上の馬で期待値馬以外の最上位
+        axis1 = expWinRate10Plus[0].horseNum;
+        const winRate10PlusWithoutAxis1 = winRate10Plus.filter(h => h.horseNum !== axis1);
+        axis2 = winRate10PlusWithoutAxis1.length > 0 ? winRate10PlusWithoutAxis1[0].horseNum : axis1;
+      } else {
+        // 期待値馬がいない場合: 勝率10%以上の馬の上位2頭
+        axis1 = winRate10Plus[0]?.horseNum;
+        axis2 = winRate10Plus[1]?.horseNum || axis1;
+      }
+      
+      // 相手馬から軸馬を除外
+      const opponent = winRate10Plus
+        .filter(h => h.horseNum !== axis1 && h.horseNum !== axis2)
+        .map(h => h.horseNum)
+        .join(',');
+      
+      const opponentCount = winRate10Plus.filter(h => h.horseNum !== axis1 && h.horseNum !== axis2).length;
       const pointsB = (axis1 === axis2 ? 0 : 1 * opponentCount);
       planB = {
         type: '3連複フォーメーション',
@@ -1766,14 +1832,20 @@ const HorseAnalysisApp = () => {
       const winRate5Plus = resultsWithRate.filter(h => h.winRate >= 5).map(h => h.horseNum).join(',');
       
       // A案: 3連単フォーメーション
+      // 2着: 期待値馬（1着を除く）または勝率5%以上の馬（1着を除く）
+      const secondHorses = expectationHorses.length > 0
+        ? expectationHorses.filter(h => h.horseNum !== top1.horseNum).map(h => h.horseNum).join(',')
+        : resultsWithRate.filter(h => h.winRate >= 5 && h.horseNum !== top1.horseNum).map(h => h.horseNum).join(',');
+      // 3着: 勝率5%以上の馬（1着を除く）
+      const thirdHorses = resultsWithRate.filter(h => h.winRate >= 5 && h.horseNum !== top1.horseNum).map(h => h.horseNum).join(',');
       const pointsA = calculateBetPoints('3連単フォーメーション', [
         `1着: ${top1.horseNum}`,
-        `2着: ${expHorses || winRate5Plus}`,
-        `3着: ${winRate5Plus}`
+        `2着: ${secondHorses || thirdHorses}`,
+        `3着: ${thirdHorses}`
       ]);
       planA = {
         type: '3連単フォーメーション',
-        horses: [`1着: ${top1.horseNum}`, `2着: ${expHorses || winRate5Plus}`, `3着: ${winRate5Plus}`],
+        horses: [`1着: ${top1.horseNum}`, `2着: ${secondHorses || thirdHorses}`, `3着: ${thirdHorses}`],
         amount: pointsA * 100,
         points: pointsA,
         reason: '勝率1位の下に断層、期待値馬または5%以上に流し',
@@ -1782,15 +1854,29 @@ const HorseAnalysisApp = () => {
       
       // B案: 3連複フォーメーション
       const axis1 = top1.horseNum;
-      const axis2Str = expHorses || winRate5Plus;
-      const axis2Count = expHorses ? expectationHorses.length : resultsWithRate.filter(h => h.winRate >= 5).length;
-      const opponentStr = winRate5Plus;
-      const opponentCount = resultsWithRate.filter(h => h.winRate >= 5).length;
-      // 軸1 × 軸2 × 相手（軸2と相手は重複可能）
-      const pointsB = 1 * axis2Count * opponentCount;
+      let axis2;
+      if (expectationHorses.length > 0) {
+        // 期待値馬がいる場合: 期待値馬の中で軸1を除いた最上位
+        const expWithoutAxis1 = expectationHorses.filter(h => h.horseNum !== axis1);
+        axis2 = expWithoutAxis1.length > 0 ? expWithoutAxis1[0].horseNum : null;
+      }
+      if (!axis2) {
+        // 期待値馬がいない、または期待値馬が軸1のみの場合: 勝率5%以上の馬で軸1を除いた最上位
+        const winRate5PlusWithoutAxis1 = resultsWithRate.filter(h => h.winRate >= 5 && h.horseNum !== axis1);
+        axis2 = winRate5PlusWithoutAxis1.length > 0 ? winRate5PlusWithoutAxis1[0].horseNum : axis1;
+      }
+      
+      // 相手馬から軸馬を除外
+      const opponent = resultsWithRate
+        .filter(h => h.winRate >= 5 && h.horseNum !== axis1 && h.horseNum !== axis2)
+        .map(h => h.horseNum)
+        .join(',');
+      
+      const opponentCount = resultsWithRate.filter(h => h.winRate >= 5 && h.horseNum !== axis1 && h.horseNum !== axis2).length;
+      const pointsB = (axis1 === axis2 ? 0 : 1 * opponentCount);
       planB = {
         type: '3連複フォーメーション',
-        horses: [`軸: ${axis1}`, `相手1: ${axis2Str}`, `相手2: ${opponentStr}`],
+        horses: [`軸: ${axis1}`, `相手1: ${axis2}`, `相手2: ${opponent}`],
         amount: pointsB * 100,
         points: pointsB,
         reason: '勝率1位を軸、期待値馬または5%以上',
