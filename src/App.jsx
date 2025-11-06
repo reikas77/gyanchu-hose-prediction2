@@ -1085,6 +1085,39 @@ const HorseAnalysisApp = () => {
     return candidates.sort((a, b) => b.winRate - a.winRate)[0];
   };
 
+  // タイム指数（スピード能力値）の偏差値を計算する関数
+  const calculateTimeIndexDeviation = (horses) => {
+    if (!horses || horses.length === 0) return {};
+    
+    // 除外されていない馬のタイム指数を取得
+    const activeHorses = horses.filter(horse => !excludedHorses[horse.horseNum]);
+    const timeIndexes = activeHorses
+      .map(horse => horse.scores && horse.scores['スピード能力値'] ? parseFloat(horse.scores['スピード能力値']) : null)
+      .filter(val => val !== null && !isNaN(val));
+    
+    if (timeIndexes.length === 0) return {};
+    
+    // 平均を計算
+    const mean = timeIndexes.reduce((sum, val) => sum + val, 0) / timeIndexes.length;
+    
+    // 標準偏差を計算
+    const variance = timeIndexes.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) / timeIndexes.length;
+    const stdDev = Math.sqrt(variance);
+    
+    // 各馬の偏差値を計算
+    const deviationMap = {};
+    activeHorses.forEach(horse => {
+      const timeIndex = horse.scores && horse.scores['スピード能力値'] ? parseFloat(horse.scores['スピード能力値']) : null;
+      if (timeIndex !== null && !isNaN(timeIndex) && stdDev > 0) {
+        deviationMap[horse.horseNum] = 50 + 10 * (timeIndex - mean) / stdDev;
+      } else {
+        deviationMap[horse.horseNum] = null;
+      }
+    });
+    
+    return deviationMap;
+  };
+
   // 買い目自動生成
   const generateBettingRecommendations = () => {
     const budget = bettingBudget;
@@ -2994,6 +3027,7 @@ const HorseAnalysisApp = () => {
   const expectationRanking = calculateExpectationRanking(resultsWithRate, oddsInput);
   const aiRecommendation = calculateAIRecommendation(resultsWithRate);
   const winRateGaps = detectWinRateGaps(resultsWithRate);
+  const timeIndexDeviations = calculateTimeIndexDeviation(currentRace.horses);
 
   return (
     <div className="w-full min-h-screen bg-gradient-to-br from-pink-100 via-purple-50 to-blue-100 p-3 md:p-6">
@@ -3140,11 +3174,17 @@ const HorseAnalysisApp = () => {
               const isSuperExpectation = horse.winRate >= 10 && value >= 220;
               const isGoodExpectation = horse.winRate >= 10 && value >= 150 && value < 220;
               
+              // タイム指数の偏差値が40.0未満の場合は背景をグレーにする
+              const timeIndexDeviation = timeIndexDeviations[horse.horseNum];
+              const isLowTimeIndexDeviation = timeIndexDeviation !== null && timeIndexDeviation !== undefined && timeIndexDeviation < 40.0;
+              
               return (
                 <React.Fragment key={horse.horseNum}>
                   <div
                     className={`p-3 md:p-4 rounded-2xl border-2 transition ${
-                      isSuperExpectation
+                      isLowTimeIndexDeviation
+                        ? 'bg-gray-300 border-gray-400 opacity-70'
+                        : isSuperExpectation
                         ? 'bg-gradient-to-r from-yellow-300 to-orange-300 border-yellow-500 shadow-lg' 
                         : isGoodExpectation && odds > 0
                         ? 'bg-yellow-200 border-yellow-400' 
