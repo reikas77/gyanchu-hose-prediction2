@@ -268,6 +268,12 @@ const HorseAnalysisApp = () => {
   const [generatedBets, setGeneratedBets] = useState([]);
 
   const [statsType, setStatsType] = useState('winrate');
+  const [statsDateFilter, setStatsDateFilter] = useState({
+    type: 'all',  // 'all' | 'single' | 'range'
+    singleDate: null,
+    startDate: null,
+    endDate: null
+  });
 
   // 新機能用のstate
   const [raceConfidence, setRaceConfidence] = useState(3);
@@ -1932,13 +1938,56 @@ const HorseAnalysisApp = () => {
       if (planC) planC.warning = warning;
     }
     
-    // 予算に応じてA案、B案、C案を選択
-    if (planA && budget >= planA.amount) {
-      bets.push(planA);
-    } else if (planB && budget >= planB.amount) {
-      bets.push(planB);
-    } else if (planC) {
-      bets.push(planC);
+    // 予算最適化機能
+    let selectedPlan = null;
+    let multiplier = 1;
+    let shortage = 0;
+    
+    // 1. A案が予算内に収まるか
+    if (planA && planA.amount <= budget) {
+      selectedPlan = planA;
+      multiplier = Math.floor(budget / planA.amount);
+    }
+    // 2. B案が予算内に収まるか
+    else if (planB && planB.amount <= budget) {
+      selectedPlan = planB;
+      multiplier = Math.floor(budget / planB.amount);
+      if (planA) {
+        shortage = planA.amount - budget;  // A案までの不足額
+      }
+    }
+    // 3. C案（最小プラン）
+    else if (planC) {
+      selectedPlan = planC;
+      if (planC.amount <= budget) {
+        multiplier = Math.floor(budget / planC.amount);
+      }
+      if (planB) {
+        shortage = planB.amount - budget;  // B案までの不足額
+      } else if (planA) {
+        shortage = planA.amount - budget;  // A案までの不足額
+      }
+    }
+    
+    if (selectedPlan) {
+      const finalCost = selectedPlan.amount * multiplier;
+      const usageRate = budget > 0 ? ((finalCost / budget) * 100).toFixed(1) : '0.0';
+      const unusedBudget = budget - finalCost;
+      
+      // 最適化された買い目情報を追加
+      const optimizedBet = {
+        ...selectedPlan,
+        multiplier: multiplier,
+        unitCost: selectedPlan.amount,
+        finalCost: finalCost,
+        budget: budget,
+        usageRate: usageRate,
+        shortage: shortage,
+        unusedBudget: unusedBudget,
+        isOptimized: true
+      };
+      
+      bets.push(optimizedBet);
     }
     
     setGeneratedBets(bets);
@@ -2167,6 +2216,33 @@ const HorseAnalysisApp = () => {
     
     if (courseKey) {
       recordedRaces = recordedRaces.filter(r => r.courseKey === courseKey);
+    }
+    
+    // 日付フィルター処理
+    if (statsDateFilter.type === 'single' && statsDateFilter.singleDate) {
+      recordedRaces = recordedRaces.filter(r => {
+        if (!r.createdAt) return false;
+        const raceDate = new Date(r.createdAt).toISOString().split('T')[0];
+        return raceDate === statsDateFilter.singleDate;
+      });
+    } else if (statsDateFilter.type === 'range') {
+      if (statsDateFilter.startDate) {
+        recordedRaces = recordedRaces.filter(r => {
+          if (!r.createdAt) return false;
+          const raceDate = new Date(r.createdAt);
+          const startDate = new Date(statsDateFilter.startDate);
+          return raceDate >= startDate;
+        });
+      }
+      if (statsDateFilter.endDate) {
+        recordedRaces = recordedRaces.filter(r => {
+          if (!r.createdAt) return false;
+          const raceDate = new Date(r.createdAt);
+          const endDate = new Date(statsDateFilter.endDate);
+          endDate.setHours(23, 59, 59, 999); // 終了日の23:59:59まで含める
+          return raceDate <= endDate;
+        });
+      }
     }
     
     if (recordedRaces.length === 0) return null;
@@ -3280,6 +3356,88 @@ const HorseAnalysisApp = () => {
                 </button>
               </div>
               
+              {/* 日付フィルター */}
+              <div className="mb-6 p-4 bg-gradient-to-r from-purple-50 to-blue-50 rounded-2xl border-2 border-purple-200">
+                <h3 className="text-sm font-bold text-gray-700 mb-3">📅 期間フィルター</h3>
+                
+                <div className="flex gap-2 mb-4">
+                  <button
+                    onClick={() => setStatsDateFilter({ type: 'all', singleDate: null, startDate: null, endDate: null })}
+                    className={`px-3 py-2 rounded-full text-xs font-bold transition ${
+                      statsDateFilter.type === 'all'
+                        ? 'bg-purple-400 text-white'
+                        : 'bg-gray-200 text-gray-800 hover:bg-gray-300'
+                    }`}
+                  >
+                    全期間
+                  </button>
+                  <button
+                    onClick={() => setStatsDateFilter({ ...statsDateFilter, type: 'single' })}
+                    className={`px-3 py-2 rounded-full text-xs font-bold transition ${
+                      statsDateFilter.type === 'single'
+                        ? 'bg-purple-400 text-white'
+                        : 'bg-gray-200 text-gray-800 hover:bg-gray-300'
+                    }`}
+                  >
+                    特定日
+                  </button>
+                  <button
+                    onClick={() => setStatsDateFilter({ ...statsDateFilter, type: 'range' })}
+                    className={`px-3 py-2 rounded-full text-xs font-bold transition ${
+                      statsDateFilter.type === 'range'
+                        ? 'bg-purple-400 text-white'
+                        : 'bg-gray-200 text-gray-800 hover:bg-gray-300'
+                    }`}
+                  >
+                    期間指定
+                  </button>
+                </div>
+                
+                {statsDateFilter.type === 'single' && (
+                  <div>
+                    <label className="block text-xs font-bold text-gray-700 mb-2">日付を選択</label>
+                    <input
+                      type="date"
+                      value={statsDateFilter.singleDate || ''}
+                      onChange={(e) => setStatsDateFilter({
+                        ...statsDateFilter,
+                        singleDate: e.target.value
+                      })}
+                      className="w-full px-3 py-2 border-2 border-purple-300 rounded-xl text-sm focus:outline-none focus:border-purple-500"
+                    />
+                  </div>
+                )}
+                
+                {statsDateFilter.type === 'range' && (
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-bold text-gray-700 mb-2">開始日</label>
+                      <input
+                        type="date"
+                        value={statsDateFilter.startDate || ''}
+                        onChange={(e) => setStatsDateFilter({
+                          ...statsDateFilter,
+                          startDate: e.target.value
+                        })}
+                        className="w-full px-3 py-2 border-2 border-purple-300 rounded-xl text-sm focus:outline-none focus:border-purple-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-gray-700 mb-2">終了日</label>
+                      <input
+                        type="date"
+                        value={statsDateFilter.endDate || ''}
+                        onChange={(e) => setStatsDateFilter({
+                          ...statsDateFilter,
+                          endDate: e.target.value
+                        })}
+                        className="w-full px-3 py-2 border-2 border-purple-300 rounded-xl text-sm focus:outline-none focus:border-purple-500"
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+              
               {calculateStats(statsFilterCourse, statsType) ? (
                 <div>
                   <div className="mb-4 p-3 bg-gray-100 rounded-2xl text-xs md:text-sm text-gray-700 font-bold">
@@ -3348,6 +3506,12 @@ const HorseAnalysisApp = () => {
                     {statsType === 'winrate' && ''}
                     {statsType !== 'winrate' && 'レースのみを集計対象としています'}
                   </p>
+                  <div className="text-xs text-gray-600 text-center mt-2 font-bold">
+                    📊 集計対象: {calculateStats(statsFilterCourse, statsType).total}レース
+                    {statsDateFilter.type === 'single' && statsDateFilter.singleDate && ` (${statsDateFilter.singleDate})`}
+                    {statsDateFilter.type === 'range' && statsDateFilter.startDate && statsDateFilter.endDate && 
+                      ` (${statsDateFilter.startDate} 〜 ${statsDateFilter.endDate})`}
+                  </div>
                 </div>
               ) : (
                 <p className="text-gray-500 text-center py-12 text-sm md:text-lg">
@@ -5493,43 +5657,159 @@ const HorseAnalysisApp = () => {
                     <StarPixelArt size={18} />
                     推奨買い目
                   </h4>
-                  <div className="space-y-3">
+                  <div className="space-y-4">
                     {generatedBets.map((bet, idx) => (
-                      <div key={idx} className="p-3 md:p-4 bg-gradient-to-r from-cyan-50 to-blue-50 rounded-2xl border-2 border-cyan-300">
-                        {bet.warning && (
-                          <div className="mb-3 p-2 bg-yellow-100 border-2 border-yellow-400 rounded-lg">
-                            <p className="text-xs text-yellow-800 font-bold">{bet.warning}</p>
-                          </div>
-                        )}
-                        <div className="flex justify-between items-start mb-2">
-                          <span className="font-bold text-cyan-700 text-sm md:text-base">{bet.type}</span>
-                          {bet.amount > 0 && (
-                            <div className="text-right">
-                              <div className="font-bold text-gray-700 text-sm md:text-base">{bet.amount.toLocaleString()}円</div>
-                              {bet.points > 0 && (
-                                <div className="text-xs text-gray-600 font-bold">{bet.points}点</div>
+                      <div key={idx}>
+                        {/* 最適化された買い目の場合 */}
+                        {bet.isOptimized ? (
+                          <>
+                            {/* 選択されたプラン */}
+                            <div className="p-4 bg-gradient-to-r from-cyan-50 to-blue-50 rounded-2xl border-2 border-cyan-300">
+                              {bet.warning && (
+                                <div className="mb-3 p-2 bg-yellow-100 border-2 border-yellow-400 rounded-lg">
+                                  <p className="text-xs text-yellow-800 font-bold">{bet.warning}</p>
+                                </div>
                               )}
+                              <div className="flex justify-between items-start mb-3">
+                                <div>
+                                  <span className="text-lg font-bold text-cyan-700">
+                                    {bet.type}
+                                  </span>
+                                  {bet.multiplier > 1 && (
+                                    <span className="ml-2 text-sm text-gray-600">
+                                      × {bet.multiplier}セット
+                                    </span>
+                                  )}
+                                </div>
+                                <span className="text-xl font-black text-cyan-600">
+                                  {bet.finalCost.toLocaleString()}円
+                                </span>
+                              </div>
+                              
+                              <div className="text-sm text-gray-700 font-bold mb-2">
+                                {bet.horses.map((horse, hIdx) => (
+                                  <div key={hIdx}>{horse}</div>
+                                ))}
+                              </div>
+                              
+                              <div className="text-xs text-gray-600 font-bold">
+                                {bet.reason}
+                              </div>
                             </div>
+                            
+                            {/* 予算使用状況 */}
+                            <div className="mt-3 p-4 bg-purple-50 rounded-2xl border-2 border-purple-200">
+                              <div className="flex justify-between items-center mb-2">
+                                <span className="text-sm font-bold text-gray-700">予算使用率</span>
+                                <span className="text-lg font-bold text-purple-600">
+                                  {bet.usageRate}%
+                                </span>
+                              </div>
+                              
+                              {/* プログレスバー */}
+                              <div className="h-3 bg-gray-200 rounded-full overflow-hidden">
+                                <div 
+                                  className="h-full bg-gradient-to-r from-purple-400 to-purple-600"
+                                  style={{ width: `${Math.min(parseFloat(bet.usageRate), 100)}%` }}
+                                />
+                              </div>
+                              
+                              <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
+                                <div className="text-gray-600">
+                                  <span className="font-bold">使用:</span> {bet.finalCost.toLocaleString()}円
+                                </div>
+                                <div className="text-gray-600">
+                                  <span className="font-bold">残り:</span> {bet.unusedBudget.toLocaleString()}円
+                                </div>
+                              </div>
+                            </div>
+                            
+                            {/* 上位プランへの案内（不足額がある場合） */}
+                            {bet.shortage > 0 && (
+                              <div className="mt-3 p-4 bg-yellow-50 rounded-2xl border-2 border-yellow-300">
+                                <div className="flex items-center gap-2 mb-2">
+                                  <span className="text-lg">💡</span>
+                                  <span className="text-sm font-bold text-yellow-800">
+                                    より良い買い目のご提案
+                                  </span>
+                                </div>
+                                <p className="text-xs text-yellow-800 font-bold">
+                                  あと<span className="text-lg font-black">{bet.shortage.toLocaleString()}円</span>追加すると、
+                                  上位プランの買い目を購入できます！
+                                </p>
+                              </div>
+                            )}
+                            
+                            {/* 内訳詳細 */}
+                            <div className="mt-3 p-4 bg-gray-50 rounded-2xl border-2 border-gray-200">
+                              <h5 className="text-sm font-bold text-gray-700 mb-2">購入内訳</h5>
+                              <div className="space-y-1 text-xs text-gray-600">
+                                <div className="flex justify-between">
+                                  <span>1セットあたり:</span>
+                                  <span className="font-bold">{bet.unitCost.toLocaleString()}円</span>
+                                </div>
+                                <div className="flex justify-between">
+                                  <span>購入セット数:</span>
+                                  <span className="font-bold">{bet.multiplier}セット</span>
+                                </div>
+                                {bet.points > 0 && (
+                                  <>
+                                    <div className="flex justify-between">
+                                      <span>点数:</span>
+                                      <span className="font-bold">{bet.points}点</span>
+                                    </div>
+                                    <div className="flex justify-between">
+                                      <span>1点あたり:</span>
+                                      <span className="font-bold">
+                                        {bet.points * bet.multiplier > 0 
+                                          ? Math.floor(bet.finalCost / (bet.points * bet.multiplier))
+                                          : 0}円
+                                      </span>
+                                    </div>
+                                  </>
+                                )}
+                              </div>
+                            </div>
+                          </>
+                        ) : (
+                          /* 通常の買い目表示 */
+                          <div className="p-3 md:p-4 bg-gradient-to-r from-cyan-50 to-blue-50 rounded-2xl border-2 border-cyan-300">
+                            {bet.warning && (
+                              <div className="mb-3 p-2 bg-yellow-100 border-2 border-yellow-400 rounded-lg">
+                                <p className="text-xs text-yellow-800 font-bold">{bet.warning}</p>
+                              </div>
+                            )}
+                        <div className="flex justify-between items-start mb-2">
+                              <span className="font-bold text-cyan-700 text-sm md:text-base">{bet.type}</span>
+                          {bet.amount > 0 && (
+                                <div className="text-right">
+                                  <div className="font-bold text-gray-700 text-sm md:text-base">{bet.amount.toLocaleString()}円</div>
+                                  {bet.points > 0 && (
+                                    <div className="text-xs text-gray-600 font-bold">{bet.points}点</div>
+                                  )}
+                                </div>
                           )}
                         </div>
                         {bet.horses.length > 0 && (
-                          <div className="text-xs md:text-sm text-gray-700 font-bold mb-2 space-y-1">
-                            {bet.horses.map((horse, hIdx) => (
-                              <div key={hIdx}>{horse}</div>
-                            ))}
+                              <div className="text-xs md:text-sm text-gray-700 font-bold mb-2 space-y-1">
+                                {bet.horses.map((horse, hIdx) => (
+                                  <div key={hIdx}>{horse}</div>
+                                ))}
                           </div>
                         )}
                         <div className="text-xs text-gray-600 font-bold">
                           {bet.reason}
                         </div>
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>
                   <div className="mt-4 p-3 bg-cyan-100 rounded-2xl text-sm text-cyan-800 font-bold flex items-center gap-2">
                     <TrophyPixelArt size={18} />
-                    合計: {generatedBets.reduce((sum, bet) => sum + bet.amount, 0).toLocaleString()}円
-                    {generatedBets.reduce((sum, bet) => sum + (bet.points || 0), 0) > 0 && (
-                      <span className="ml-2">({generatedBets.reduce((sum, bet) => sum + (bet.points || 0), 0)}点)</span>
+                    合計: {generatedBets.reduce((sum, bet) => sum + (bet.finalCost || bet.amount || 0), 0).toLocaleString()}円
+                    {generatedBets.reduce((sum, bet) => sum + ((bet.points || 0) * (bet.multiplier || 1)), 0) > 0 && (
+                      <span className="ml-2">({generatedBets.reduce((sum, bet) => sum + ((bet.points || 0) * (bet.multiplier || 1)), 0)}点)</span>
                     )}
                   </div>
                 </div>
@@ -5917,4 +6197,5 @@ const HorseAnalysisApp = () => {
 };
 
 export default HorseAnalysisApp;
+
 
