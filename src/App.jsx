@@ -284,6 +284,11 @@ const HorseAnalysisApp = () => {
   const [showEditCourseModal, setShowEditCourseModal] = useState(false);
   const [editingCourseKey, setEditingCourseKey] = useState(null);
   
+  // 📝 コース設定名変更関連のstate
+  const [showRenameCourseModal, setShowRenameCourseModal] = useState(false);
+  const [renamingCourseKey, setRenamingCourseKey] = useState(null);
+  const [newCourseName, setNewCourseName] = useState('');
+  
   // ✏️ レース編集関連のstate
   const [showEditRaceModal, setShowEditRaceModal] = useState(false);
   const [editingRaceData, setEditingRaceData] = useState(null);
@@ -1015,6 +1020,63 @@ const HorseAnalysisApp = () => {
           window.alert('コース設定の更新に失敗しました');
         });
     }
+  };
+
+  // 📝 コース設定名変更処理
+  const handleRenameCourse = (courseKey) => {
+    setRenamingCourseKey(courseKey);
+    setNewCourseName(courseKey);
+    setShowRenameCourseModal(true);
+  };
+
+  // 📝 コース設定名を保存
+  const saveCourseName = () => {
+    if (!renamingCourseKey || !newCourseName.trim()) {
+      window.alert('コース名を入力してください');
+      return;
+    }
+    
+    if (newCourseName === renamingCourseKey) {
+      setShowRenameCourseModal(false);
+      return;
+    }
+    
+    // 同名のコース設定が既に存在するかチェック
+    if (courseSettings[newCourseName]) {
+      window.alert('同じ名前のコース設定が既に存在します');
+      return;
+    }
+    
+    // 新しい名前でコース設定を保存
+    const courseData = courseSettings[renamingCourseKey];
+    const newSettings = { ...courseSettings };
+    
+    // 古い名前を削除
+    delete newSettings[renamingCourseKey];
+    
+    // 新しい名前で追加
+    newSettings[newCourseName] = courseData;
+    
+    // Firebaseに保存
+    const settingsRef = ref(database, 'courseSettings');
+    set(settingsRef, newSettings)
+      .then(() => {
+        // このコース設定を使用しているレースの参照も更新
+        const racesUsingThisCourse = races.filter(r => r.courseKey === renamingCourseKey);
+        
+        racesUsingThisCourse.forEach(race => {
+          const raceRef = ref(database, `races/${race.firebaseId}/courseKey`);
+          set(raceRef, newCourseName);
+        });
+        
+        setShowRenameCourseModal(false);
+        setRenamingCourseKey(null);
+        setNewCourseName('');
+      })
+      .catch((error) => {
+        console.error('コース名の変更に失敗:', error);
+        window.alert('コース名の変更に失敗しました');
+      });
   };
 
   // 🕐 発走時間をフォーマット
@@ -3277,12 +3339,22 @@ const HorseAnalysisApp = () => {
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
+                              handleRenameCourse(name);
+                            }}
+                            className="p-1.5 md:p-2 text-purple-500 hover:bg-purple-50 rounded-full transition"
+                            title="名称変更"
+                          >
+                            ✏️📝
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
                               handleEditCourse(name);
                             }}
                             className="p-1.5 md:p-2 text-blue-500 hover:bg-blue-50 rounded-full transition"
-                            title="編集"
+                            title="比重を編集"
                           >
-                            ✏️
+                            ⚙️
                           </button>
                           <button
                             onClick={(e) => {
@@ -4693,6 +4765,66 @@ const HorseAnalysisApp = () => {
                     onClick={() => {
                       setShowEditCourseModal(false);
                       setEditingCourseKey(null);
+                    }}
+                    className="flex-1 px-4 py-3 bg-gray-300 text-gray-800 rounded-full font-bold hover:bg-gray-400 transition"
+                  >
+                    キャンセル
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* 📝 コース設定名変更モーダル */}
+          {showRenameCourseModal && (
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+              <div className="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl">
+                <h3 className="text-xl font-bold mb-6 text-gray-800 flex items-center gap-2">
+                  <CrownPixelArt size={24} />
+                  コース設定名を変更
+                </h3>
+                
+                <div className="mb-6">
+                  <label className="block text-sm font-bold text-gray-700 mb-2">
+                    現在の名前
+                  </label>
+                  <div className="px-4 py-3 bg-gray-100 rounded-2xl text-gray-600 font-bold">
+                    {renamingCourseKey}
+                  </div>
+                </div>
+                
+                <div className="mb-6">
+                  <label className="block text-sm font-bold text-gray-700 mb-2">
+                    新しい名前
+                  </label>
+                  <input
+                    type="text"
+                    value={newCourseName}
+                    onChange={(e) => setNewCourseName(e.target.value)}
+                    className="w-full px-4 py-3 border-2 border-purple-300 rounded-2xl focus:outline-none focus:border-purple-500"
+                    placeholder="新しいコース名"
+                    autoFocus
+                  />
+                </div>
+                
+                <div className="mb-4 p-3 bg-yellow-50 rounded-2xl border-2 border-yellow-200">
+                  <p className="text-xs text-yellow-800 font-bold">
+                    ⚠️ このコース設定を使用している全てのレースの参照も自動的に更新されます
+                  </p>
+                </div>
+
+                <div className="flex gap-4">
+                  <button
+                    onClick={saveCourseName}
+                    className="flex-1 px-4 py-3 bg-gradient-to-r from-purple-400 to-purple-500 text-white rounded-full font-bold shadow-lg hover:shadow-2xl transition"
+                  >
+                    変更を保存
+                  </button>
+                  <button
+                    onClick={() => {
+                      setShowRenameCourseModal(false);
+                      setRenamingCourseKey(null);
+                      setNewCourseName('');
                     }}
                     className="flex-1 px-4 py-3 bg-gray-300 text-gray-800 rounded-full font-bold hover:bg-gray-400 transition"
                   >
