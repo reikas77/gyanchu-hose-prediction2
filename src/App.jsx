@@ -307,6 +307,18 @@ const HorseAnalysisApp = () => {
   // 仮想レース視覚化用のstate
   const [showTrackDiagram, setShowTrackDiagram] = useState(false);
 
+  // 足切り偏差値設定用のstate（各ファクターごと）
+  const [cutoffDeviations, setCutoffDeviations] = useState({
+    'スピード能力値': 40.0, // デフォルト値
+    'コース・距離適性': null,
+    '展開利': null,
+    '近走安定度': null,
+    '馬場適性': null,
+    '騎手': null,
+    '斤量': null,
+    '調教': null
+  });
+
   const factors = [
     { name: '能力値', weight: 15, key: 'タイム指数' },
     { name: 'コース・距離適性', weight: 18, key: 'コース・距離適性' },
@@ -840,6 +852,23 @@ const HorseAnalysisApp = () => {
       setExcludedHorses(selectedLockedRace.excluded || {});
       setExpCoefficient(selectedLockedRace.expCoefficient || 0.1);
       
+      // 足切り偏差値設定を読み込む
+      if (selectedLockedRace.cutoffDeviations) {
+        setCutoffDeviations(selectedLockedRace.cutoffDeviations);
+      } else {
+        // デフォルト値にリセット
+        setCutoffDeviations({
+          'スピード能力値': 40.0,
+          'コース・距離適性': null,
+          '展開利': null,
+          '近走安定度': null,
+          '馬場適性': null,
+          '騎手': null,
+          '斤量': null,
+          '調教': null
+        });
+      }
+      
       setShowPasscodeModal(false);
       setPasscodeInput('');
       setPasscodeError('');
@@ -878,6 +907,23 @@ const HorseAnalysisApp = () => {
       setExcludedHorses(race.excluded || {});
       setExpCoefficient(race.expCoefficient || 0.1);
       setHorseMarks(race.horseMarks || {});
+      
+      // 足切り偏差値設定を読み込む
+      if (race.cutoffDeviations) {
+        setCutoffDeviations(race.cutoffDeviations);
+      } else {
+        // デフォルト値にリセット
+        setCutoffDeviations({
+          'スピード能力値': 40.0,
+          'コース・距離適性': null,
+          '展開利': null,
+          '近走安定度': null,
+          '馬場適性': null,
+          '騎手': null,
+          '斤量': null,
+          '調教': null
+        });
+      }
       
       // 👁️ 閲覧数をカウント
       incrementViewCount(race.firebaseId);
@@ -1085,37 +1131,60 @@ const HorseAnalysisApp = () => {
     return candidates.sort((a, b) => b.winRate - a.winRate)[0];
   };
 
-  // タイム指数（スピード能力値）の偏差値を計算する関数
-  const calculateTimeIndexDeviation = (horses) => {
+  // 全ファクターの偏差値を計算する関数
+  const calculateFactorDeviations = (horses) => {
     if (!horses || horses.length === 0) return {};
     
-    // 除外されていない馬のタイム指数を取得
+    // 除外されていない馬を取得
     const activeHorses = horses.filter(horse => !excludedHorses[horse.horseNum]);
-    const timeIndexes = activeHorses
-      .map(horse => horse.scores && horse.scores['スピード能力値'] ? parseFloat(horse.scores['スピード能力値']) : null)
-      .filter(val => val !== null && !isNaN(val));
     
-    if (timeIndexes.length === 0) return {};
+    if (activeHorses.length === 0) return {};
     
-    // 平均を計算
-    const mean = timeIndexes.reduce((sum, val) => sum + val, 0) / timeIndexes.length;
+    // 全ファクターのキーリスト
+    const factorKeys = ['スピード能力値', 'コース・距離適性', '展開利', '近走安定度', '馬場適性', '騎手', '斤量', '調教'];
     
-    // 標準偏差を計算
-    const variance = timeIndexes.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) / timeIndexes.length;
-    const stdDev = Math.sqrt(variance);
+    // 各ファクターごとに偏差値を計算
+    const deviationsByFactor = {};
     
-    // 各馬の偏差値を計算
-    const deviationMap = {};
-    activeHorses.forEach(horse => {
-      const timeIndex = horse.scores && horse.scores['スピード能力値'] ? parseFloat(horse.scores['スピード能力値']) : null;
-      if (timeIndex !== null && !isNaN(timeIndex) && stdDev > 0) {
-        deviationMap[horse.horseNum] = 50 + 10 * (timeIndex - mean) / stdDev;
-      } else {
-        deviationMap[horse.horseNum] = null;
+    factorKeys.forEach(factorKey => {
+      // 各馬の該当ファクターの値を取得
+      const values = activeHorses
+        .map(horse => horse.scores && horse.scores[factorKey] ? parseFloat(horse.scores[factorKey]) : null)
+        .filter(val => val !== null && !isNaN(val));
+      
+      if (values.length === 0) {
+        deviationsByFactor[factorKey] = {};
+        return;
       }
+      
+      // 平均を計算
+      const mean = values.reduce((sum, val) => sum + val, 0) / values.length;
+      
+      // 標準偏差を計算
+      const variance = values.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) / values.length;
+      const stdDev = Math.sqrt(variance);
+      
+      // 各馬の偏差値を計算
+      const deviationMap = {};
+      activeHorses.forEach(horse => {
+        const value = horse.scores && horse.scores[factorKey] ? parseFloat(horse.scores[factorKey]) : null;
+        if (value !== null && !isNaN(value) && stdDev > 0) {
+          deviationMap[horse.horseNum] = 50 + 10 * (value - mean) / stdDev;
+        } else {
+          deviationMap[horse.horseNum] = null;
+        }
+      });
+      
+      deviationsByFactor[factorKey] = deviationMap;
     });
     
-    return deviationMap;
+    return deviationsByFactor;
+  };
+
+  // タイム指数（スピード能力値）の偏差値を計算する関数（後方互換性のため残す）
+  const calculateTimeIndexDeviation = (horses) => {
+    const allDeviations = calculateFactorDeviations(horses);
+    return allDeviations['スピード能力値'] || {};
   };
 
   // 買い目自動生成
@@ -1538,6 +1607,44 @@ const HorseAnalysisApp = () => {
       ...selectedFactors,
       [factorKey]: !selectedFactors[factorKey]
     });
+  };
+
+  // 足切り偏差値設定を保存
+  const saveCutoffDeviations = () => {
+    if (!currentRace || !currentRace.firebaseId) return;
+    
+    const raceRef = ref(database, `races/${currentRace.firebaseId}`);
+    set(raceRef, {
+      ...currentRace,
+      cutoffDeviations: cutoffDeviations
+    });
+    setCurrentRace({
+      ...currentRace,
+      cutoffDeviations: cutoffDeviations
+    });
+  };
+
+  // 足切り偏差値を更新
+  const updateCutoffDeviation = (factorKey, value) => {
+    const numValue = value === '' || value === null ? null : parseFloat(value);
+    const newCutoffDeviations = {
+      ...cutoffDeviations,
+      [factorKey]: numValue
+    };
+    setCutoffDeviations(newCutoffDeviations);
+    
+    // 自動保存
+    if (currentRace && currentRace.firebaseId) {
+      const raceRef = ref(database, `races/${currentRace.firebaseId}`);
+      set(raceRef, {
+        ...currentRace,
+        cutoffDeviations: newCutoffDeviations
+      });
+      setCurrentRace({
+        ...currentRace,
+        cutoffDeviations: newCutoffDeviations
+      });
+    }
   };
 
   const handleSaveResult = () => {
@@ -3027,7 +3134,7 @@ const HorseAnalysisApp = () => {
   const expectationRanking = calculateExpectationRanking(resultsWithRate, oddsInput);
   const aiRecommendation = calculateAIRecommendation(resultsWithRate);
   const winRateGaps = detectWinRateGaps(resultsWithRate);
-  const timeIndexDeviations = calculateTimeIndexDeviation(currentRace.horses);
+  const allFactorDeviations = calculateFactorDeviations(currentRace.horses);
 
   return (
     <div className="w-full min-h-screen bg-gradient-to-br from-pink-100 via-purple-50 to-blue-100 p-3 md:p-6">
@@ -3066,19 +3173,39 @@ const HorseAnalysisApp = () => {
             <StarPixelArt size={20} />
             ファクター選択
           </h2>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-2 p-2 md:p-4 bg-gradient-to-br from-pink-50 to-purple-50 rounded-2xl">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 p-2 md:p-4 bg-gradient-to-br from-pink-50 to-purple-50 rounded-2xl">
             {Object.entries(selectedFactors).map(([factorKey, isSelected]) => (
-              <label key={factorKey} className="flex items-center gap-2 cursor-pointer p-2 hover:bg-white rounded-lg transition text-xs md:text-sm">
-                <input
-                  type="checkbox"
-                  checked={isSelected}
-                  onChange={() => handleFactorToggle(factorKey)}
-                  className="w-4 h-4 accent-pink-500"
-                />
-                <span className="font-bold text-gray-700 truncate">{factorKey}</span>
-              </label>
+              <div key={factorKey} className="flex items-center gap-2 p-2 hover:bg-white rounded-lg transition">
+                <label className="flex items-center gap-2 cursor-pointer flex-1 text-xs md:text-sm">
+                  <input
+                    type="checkbox"
+                    checked={isSelected}
+                    onChange={() => handleFactorToggle(factorKey)}
+                    className="w-4 h-4 accent-pink-500"
+                  />
+                  <span className="font-bold text-gray-700 truncate flex-1">{factorKey}</span>
+                </label>
+                {isAdmin && (
+                  <div className="flex items-center gap-1 flex-shrink-0">
+                    <input
+                      type="number"
+                      step="0.1"
+                      value={cutoffDeviations[factorKey] ?? ''}
+                      onChange={(e) => updateCutoffDeviation(factorKey, e.target.value)}
+                      placeholder="切"
+                      className="w-16 px-2 py-1 border-2 border-purple-300 rounded-lg text-xs focus:outline-none focus:border-purple-500 font-bold text-center"
+                    />
+                    <span className="text-xs text-gray-600 font-bold">以上</span>
+                  </div>
+                )}
+              </div>
             ))}
           </div>
+          {isAdmin && (
+            <div className="mt-3 p-2 bg-purple-100 rounded-lg text-xs text-purple-800 font-bold border-2 border-purple-300">
+              💡 管理者のみ：各ファクターの足切り偏差値を設定できます。設定した基準をクリアしない馬は背景がグレーになります。
+            </div>
+          )}
         </div>
 
         <div className="bg-white rounded-3xl p-3 md:p-6 shadow-lg mb-4 md:mb-6 border-2 border-purple-200">
@@ -3174,15 +3301,25 @@ const HorseAnalysisApp = () => {
               const isSuperExpectation = horse.winRate >= 10 && value >= 220;
               const isGoodExpectation = horse.winRate >= 10 && value >= 150 && value < 220;
               
-              // タイム指数の偏差値が40.0未満の場合は背景をグレーにする
-              const timeIndexDeviation = timeIndexDeviations[horse.horseNum];
-              const isLowTimeIndexDeviation = timeIndexDeviation !== null && timeIndexDeviation !== undefined && timeIndexDeviation < 40.0;
+              // 全ファクターの偏差値をチェックして、基準未達のファクターを特定
+              const failedFactors = [];
+              Object.keys(cutoffDeviations).forEach(factorKey => {
+                const cutoff = cutoffDeviations[factorKey];
+                if (cutoff !== null && cutoff !== undefined) {
+                  const deviation = allFactorDeviations[factorKey]?.[horse.horseNum];
+                  if (deviation === null || deviation === undefined || deviation < cutoff) {
+                    failedFactors.push(factorKey);
+                  }
+                }
+              });
+              
+              const isCutoffFailed = failedFactors.length > 0;
               
               return (
                 <React.Fragment key={horse.horseNum}>
                   <div
                     className={`p-3 md:p-4 rounded-2xl border-2 transition ${
-                      isLowTimeIndexDeviation
+                      isCutoffFailed
                         ? 'bg-gray-300 border-gray-400 opacity-70'
                         : isSuperExpectation
                         ? 'bg-gradient-to-r from-yellow-300 to-orange-300 border-yellow-500 shadow-lg' 
@@ -3225,6 +3362,28 @@ const HorseAnalysisApp = () => {
                               {expectationRanking[horse.horseNum] && (
                                 <span className="text-purple-600 ml-1">（期待値{expectationRanking[horse.horseNum]}位）</span>
                               )}
+                            </div>
+                          )}
+                          {isCutoffFailed && (
+                            <div className="mt-2 flex items-center gap-2 flex-wrap">
+                              <span className="px-2 py-1 bg-red-100 text-red-800 rounded-lg text-xs font-bold border-2 border-red-400 flex items-center gap-1">
+                                ⚠️ 基準未達
+                              </span>
+                              <div className="flex items-center gap-1 flex-wrap">
+                                {failedFactors.map((factorKey, fIdx) => {
+                                  const deviation = allFactorDeviations[factorKey]?.[horse.horseNum];
+                                  const cutoff = cutoffDeviations[factorKey];
+                                  return (
+                                    <span
+                                      key={fIdx}
+                                      className="px-2 py-0.5 bg-orange-100 text-orange-800 rounded text-xs font-bold border border-orange-400"
+                                      title={`${factorKey}: 偏差値${deviation !== null && deviation !== undefined ? deviation.toFixed(1) : 'N/A'} (基準: ${cutoff}以上)`}
+                                    >
+                                      {factorKey}
+                                    </span>
+                                  );
+                                })}
+                              </div>
                             </div>
                           )}
                         </div>
