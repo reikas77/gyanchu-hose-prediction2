@@ -302,15 +302,25 @@ const HorseAnalysisApp = () => {
   // 高度フィルター用のstate
   const [showAdvancedFilterModal, setShowAdvancedFilterModal] = useState(false);
   const [advancedFilters, setAdvancedFilters] = useState({
-    gapsAbove3: false,      // 勝率上位3頭の下に断層
-    gaps2Plus: false,       // 断層2つ以上
-    gaps3Plus: false,       // 断層3つ以上
-    hasExpectation: false,  // 期待値150以上の馬あり
-    hasSuperExp: false,     // 超期待値220以上の馬あり
-    hasAiRec: false,        // AIおすすめ馬あり
-    tanshoHit: false,       // 単勝的中
-    fukushoHit: false,      // 複勝的中
-    miss: false             // 不的中
+    gapPositions: {
+      after1st: false,   // 勝率1位の下に断層がある
+      after2nd: false,   // 勝率2位の下に断層がある
+      after3rd: false,    // 勝率3位の下に断層がある
+      after4th: false,    // 勝率4位の下に断層がある
+      after5th: false,    // 勝率5位の下に断層がある
+      after6th: false     // 勝率6位以下の下に断層がある
+    },
+    gapCount: 'any',      // 'any' | 'exactly1' | 'exactly2' | '3plus'
+    specialHorses: {
+      hasExpectation: false,   // 期待値150以上の馬がいる
+      hasSuperExp: false,      // 超期待値馬（220以上）がいる
+      hasAiRec: false          // AIおすすめ馬がいる
+    },
+    resultFilter: {
+      tanshoHit: false,    // 単勝的中したレース
+      fukushoHit: false,   // 複勝的中したレース
+      miss: false          // 不的中レース（単勝も複勝も外れ）
+    }
   });
 
   // 勝率ランキングの印機能用のstate
@@ -1782,42 +1792,58 @@ const HorseAnalysisApp = () => {
   const checkAdvancedFilter = (race) => {
     if (!race || !race.horses) return false;
     
+    const filters = advancedFilters;
+    
     // フィルターが1つも選択されていない場合は全て表示
-    const hasAnyFilter = Object.values(advancedFilters).some(v => v === true);
-    if (!hasAnyFilter) return true;
+    const hasGapPositionFilter = Object.values(filters.gapPositions).some(v => v === true);
+    const hasGapCountFilter = filters.gapCount !== 'any';
+    const hasSpecialHorseFilter = Object.values(filters.specialHorses).some(v => v === true);
+    const hasResultFilter = Object.values(filters.resultFilter).some(v => v === true);
+    
+    if (!hasGapPositionFilter && !hasGapCountFilter && !hasSpecialHorseFilter && !hasResultFilter) {
+      return true;
+    }
     
     // 各条件をチェック（AND条件）
     let matchesAll = true;
     
     // 断層関連の判定
-    if (advancedFilters.gapsAbove3 || advancedFilters.gaps2Plus || advancedFilters.gaps3Plus) {
+    if (hasGapPositionFilter || hasGapCountFilter) {
       const winRates = calculateWinRate(race.horses, race.courseKey);
       const gaps = detectWinRateGaps(winRates);
       
-      // 勝率上位3頭の下に断層がある
-      if (advancedFilters.gapsAbove3) {
-        const hasGapAbove3 = gaps.some(gapIndex => gapIndex < 3);
-        if (!hasGapAbove3) matchesAll = false;
+      // 断層位置の判定
+      if (hasGapPositionFilter) {
+        const gapPositionMatch = 
+          (!filters.gapPositions.after1st || gaps.includes(0)) &&
+          (!filters.gapPositions.after2nd || gaps.includes(1)) &&
+          (!filters.gapPositions.after3rd || gaps.includes(2)) &&
+          (!filters.gapPositions.after4th || gaps.includes(3)) &&
+          (!filters.gapPositions.after5th || gaps.includes(4)) &&
+          (!filters.gapPositions.after6th || gaps.some(g => g >= 5));
+        
+        if (!gapPositionMatch) matchesAll = false;
       }
       
-      // 断層が2つ以上
-      if (advancedFilters.gaps2Plus) {
-        if (gaps.length < 2) matchesAll = false;
-      }
-      
-      // 断層が3つ以上
-      if (advancedFilters.gaps3Plus) {
-        if (gaps.length < 3) matchesAll = false;
+      // 断層の数の判定
+      if (hasGapCountFilter) {
+        const gapCountMatch = 
+          filters.gapCount === 'any' ||
+          (filters.gapCount === 'exactly1' && gaps.length === 1) ||
+          (filters.gapCount === 'exactly2' && gaps.length === 2) ||
+          (filters.gapCount === '3plus' && gaps.length >= 3);
+        
+        if (!gapCountMatch) matchesAll = false;
       }
     }
     
-    // 期待値馬関連の判定
-    if (advancedFilters.hasExpectation || advancedFilters.hasSuperExp || advancedFilters.hasAiRec) {
+    // 特殊な馬の存在の判定
+    if (hasSpecialHorseFilter) {
       const winRates = calculateWinRate(race.horses, race.courseKey);
       const odds = race.odds || {};
       
       // 期待値150以上の馬がいる
-      if (advancedFilters.hasExpectation) {
+      if (filters.specialHorses.hasExpectation) {
         const hasExp = winRates.some(horse => {
           const horseOdds = odds[horse.horseNum] || 0;
           const value = horseOdds * horse.winRate;
@@ -1827,7 +1853,7 @@ const HorseAnalysisApp = () => {
       }
       
       // 超期待値220以上の馬がいる
-      if (advancedFilters.hasSuperExp) {
+      if (filters.specialHorses.hasSuperExp) {
         const hasSuperExp = winRates.some(horse => {
           const horseOdds = odds[horse.horseNum] || 0;
           const value = horseOdds * horse.winRate;
@@ -1837,35 +1863,32 @@ const HorseAnalysisApp = () => {
       }
       
       // AIおすすめ馬がいる
-      if (advancedFilters.hasAiRec) {
+      if (filters.specialHorses.hasAiRec) {
         const aiRec = calculateAIRecommendation(winRates, odds);
         if (!aiRec) matchesAll = false;
       }
     }
     
     // 結果関連の判定
-    if (advancedFilters.tanshoHit || advancedFilters.fukushoHit || advancedFilters.miss) {
+    if (hasResultFilter) {
       if (!race.result) {
         // 結果が記録されていない場合は結果関連のフィルターは全てfalse
-        if (advancedFilters.tanshoHit || advancedFilters.fukushoHit || advancedFilters.miss) {
-          matchesAll = false;
-        }
+        matchesAll = false;
       } else {
         // 単勝的中
-        if (advancedFilters.tanshoHit) {
+        if (filters.resultFilter.tanshoHit) {
           if (race.result.tansho !== 'hit') matchesAll = false;
         }
         
         // 複勝的中
-        if (advancedFilters.fukushoHit) {
+        if (filters.resultFilter.fukushoHit) {
           if (race.result.fukusho !== 'hit') matchesAll = false;
         }
         
         // 不的中（単勝も複勝も外れた）
-        if (advancedFilters.miss) {
-          if (race.result.tansho === 'hit' || race.result.fukusho === 'hit') {
-            matchesAll = false;
-          }
+        if (filters.resultFilter.miss) {
+          const missMatch = race.result.tansho === 'miss' && race.result.fukusho === 'miss';
+          if (!missMatch) matchesAll = false;
         }
       }
     }
@@ -2083,31 +2106,65 @@ const HorseAnalysisApp = () => {
                           <button
                             onClick={() => setShowAdvancedFilterModal(true)}
                             className={`px-4 py-2 rounded-full text-xs md:text-sm font-bold transition flex items-center gap-2 ${
-                              Object.values(advancedFilters).some(v => v === true)
+                              (() => {
+                                const hasGapPosition = Object.values(advancedFilters.gapPositions).some(v => v === true);
+                                const hasGapCount = advancedFilters.gapCount !== 'any';
+                                const hasSpecialHorse = Object.values(advancedFilters.specialHorses).some(v => v === true);
+                                const hasResult = Object.values(advancedFilters.resultFilter).some(v => v === true);
+                                return hasGapPosition || hasGapCount || hasSpecialHorse || hasResult;
+                              })()
                                 ? 'bg-gradient-to-r from-pink-400 to-purple-500 text-white shadow-lg'
                                 : 'bg-gray-200 text-gray-800 hover:bg-gray-300'
                             }`}
                           >
                             🔍 詳細検索
-                            {Object.values(advancedFilters).some(v => v === true) && (
-                              <span className="px-2 py-0.5 bg-white text-purple-600 rounded-full text-xs font-bold">
-                                {Object.values(advancedFilters).filter(v => v === true).length}
-                              </span>
-                            )}
+                            {(() => {
+                              const hasGapPosition = Object.values(advancedFilters.gapPositions).some(v => v === true);
+                              const hasGapCount = advancedFilters.gapCount !== 'any';
+                              const hasSpecialHorse = Object.values(advancedFilters.specialHorses).some(v => v === true);
+                              const hasResult = Object.values(advancedFilters.resultFilter).some(v => v === true);
+                              const count = [
+                                hasGapPosition,
+                                hasGapCount,
+                                hasSpecialHorse,
+                                hasResult
+                              ].filter(Boolean).length;
+                              return count > 0 ? (
+                                <span className="px-2 py-0.5 bg-white text-purple-600 rounded-full text-xs font-bold">
+                                  {count}
+                                </span>
+                              ) : null;
+                            })()}
                           </button>
-                          {Object.values(advancedFilters).some(v => v === true) && (
+                          {(() => {
+                            const hasGapPosition = Object.values(advancedFilters.gapPositions).some(v => v === true);
+                            const hasGapCount = advancedFilters.gapCount !== 'any';
+                            const hasSpecialHorse = Object.values(advancedFilters.specialHorses).some(v => v === true);
+                            const hasResult = Object.values(advancedFilters.resultFilter).some(v => v === true);
+                            return hasGapPosition || hasGapCount || hasSpecialHorse || hasResult;
+                          })() && (
                             <button
                               onClick={() => {
                                 setAdvancedFilters({
-                                  gapsAbove3: false,
-                                  gaps2Plus: false,
-                                  gaps3Plus: false,
-                                  hasExpectation: false,
-                                  hasSuperExp: false,
-                                  hasAiRec: false,
-                                  tanshoHit: false,
-                                  fukushoHit: false,
-                                  miss: false
+                                  gapPositions: {
+                                    after1st: false,
+                                    after2nd: false,
+                                    after3rd: false,
+                                    after4th: false,
+                                    after5th: false,
+                                    after6th: false
+                                  },
+                                  gapCount: 'any',
+                                  specialHorses: {
+                                    hasExpectation: false,
+                                    hasSuperExp: false,
+                                    hasAiRec: false
+                                  },
+                                  resultFilter: {
+                                    tanshoHit: false,
+                                    fukushoHit: false,
+                                    miss: false
+                                  }
                                 });
                               }}
                               className="px-3 py-2 rounded-full text-xs md:text-sm font-bold bg-gray-300 text-gray-800 hover:bg-gray-400 transition"
@@ -2121,7 +2178,13 @@ const HorseAnalysisApp = () => {
                   )}
                 
                 {/* 該当件数表示（過去の予想タブで高度フィルター適用時） */}
-                {activeTab === 'races-past' && isAdmin && Object.values(advancedFilters).some(v => v === true) && (
+                {activeTab === 'races-past' && isAdmin && (() => {
+                  const hasGapPosition = Object.values(advancedFilters.gapPositions).some(v => v === true);
+                  const hasGapCount = advancedFilters.gapCount !== 'any';
+                  const hasSpecialHorse = Object.values(advancedFilters.specialHorses).some(v => v === true);
+                  const hasResult = Object.values(advancedFilters.resultFilter).some(v => v === true);
+                  return hasGapPosition || hasGapCount || hasSpecialHorse || hasResult;
+                })() && (
                   <div className="mb-4 p-3 bg-gradient-to-r from-purple-100 to-pink-100 rounded-2xl border-2 border-purple-300">
                     <p className="text-sm font-bold text-purple-800 text-center">
                       {(() => {
@@ -2494,55 +2557,155 @@ const HorseAnalysisApp = () => {
                 </div>
 
                 <div className="space-y-6">
-                  {/* 断層関連 */}
+                  {/* 条件1：断層の位置 */}
                   <div>
                     <h3 className="text-base md:text-lg font-bold text-gray-700 mb-3 flex items-center gap-2">
                       <span>📊</span>
-                      断層関連
+                      条件1：断層の位置（複数選択可）
                     </h3>
                     <div className="space-y-2 pl-6">
                       <label className="flex items-center gap-3 cursor-pointer p-2 hover:bg-purple-50 rounded-lg transition">
                         <input
                           type="checkbox"
-                          checked={advancedFilters.gapsAbove3}
-                          onChange={(e) => setAdvancedFilters({ ...advancedFilters, gapsAbove3: e.target.checked })}
+                          checked={advancedFilters.gapPositions.after1st}
+                          onChange={(e) => setAdvancedFilters({
+                            ...advancedFilters,
+                            gapPositions: { ...advancedFilters.gapPositions, after1st: e.target.checked }
+                          })}
                           className="w-5 h-5 accent-purple-500"
                         />
-                        <span className="text-sm font-bold text-gray-700">勝率上位3頭の下に断層がある</span>
+                        <span className="text-sm font-bold text-gray-700">勝率1位の下に断層がある</span>
                       </label>
                       <label className="flex items-center gap-3 cursor-pointer p-2 hover:bg-purple-50 rounded-lg transition">
                         <input
                           type="checkbox"
-                          checked={advancedFilters.gaps2Plus}
-                          onChange={(e) => setAdvancedFilters({ ...advancedFilters, gaps2Plus: e.target.checked })}
+                          checked={advancedFilters.gapPositions.after2nd}
+                          onChange={(e) => setAdvancedFilters({
+                            ...advancedFilters,
+                            gapPositions: { ...advancedFilters.gapPositions, after2nd: e.target.checked }
+                          })}
                           className="w-5 h-5 accent-purple-500"
                         />
-                        <span className="text-sm font-bold text-gray-700">断層が2つ以上ある</span>
+                        <span className="text-sm font-bold text-gray-700">勝率2位の下に断層がある</span>
                       </label>
                       <label className="flex items-center gap-3 cursor-pointer p-2 hover:bg-purple-50 rounded-lg transition">
                         <input
                           type="checkbox"
-                          checked={advancedFilters.gaps3Plus}
-                          onChange={(e) => setAdvancedFilters({ ...advancedFilters, gaps3Plus: e.target.checked })}
+                          checked={advancedFilters.gapPositions.after3rd}
+                          onChange={(e) => setAdvancedFilters({
+                            ...advancedFilters,
+                            gapPositions: { ...advancedFilters.gapPositions, after3rd: e.target.checked }
+                          })}
                           className="w-5 h-5 accent-purple-500"
                         />
-                        <span className="text-sm font-bold text-gray-700">断層が3つ以上ある</span>
+                        <span className="text-sm font-bold text-gray-700">勝率3位の下に断層がある</span>
+                      </label>
+                      <label className="flex items-center gap-3 cursor-pointer p-2 hover:bg-purple-50 rounded-lg transition">
+                        <input
+                          type="checkbox"
+                          checked={advancedFilters.gapPositions.after4th}
+                          onChange={(e) => setAdvancedFilters({
+                            ...advancedFilters,
+                            gapPositions: { ...advancedFilters.gapPositions, after4th: e.target.checked }
+                          })}
+                          className="w-5 h-5 accent-purple-500"
+                        />
+                        <span className="text-sm font-bold text-gray-700">勝率4位の下に断層がある</span>
+                      </label>
+                      <label className="flex items-center gap-3 cursor-pointer p-2 hover:bg-purple-50 rounded-lg transition">
+                        <input
+                          type="checkbox"
+                          checked={advancedFilters.gapPositions.after5th}
+                          onChange={(e) => setAdvancedFilters({
+                            ...advancedFilters,
+                            gapPositions: { ...advancedFilters.gapPositions, after5th: e.target.checked }
+                          })}
+                          className="w-5 h-5 accent-purple-500"
+                        />
+                        <span className="text-sm font-bold text-gray-700">勝率5位の下に断層がある</span>
+                      </label>
+                      <label className="flex items-center gap-3 cursor-pointer p-2 hover:bg-purple-50 rounded-lg transition">
+                        <input
+                          type="checkbox"
+                          checked={advancedFilters.gapPositions.after6th}
+                          onChange={(e) => setAdvancedFilters({
+                            ...advancedFilters,
+                            gapPositions: { ...advancedFilters.gapPositions, after6th: e.target.checked }
+                          })}
+                          className="w-5 h-5 accent-purple-500"
+                        />
+                        <span className="text-sm font-bold text-gray-700">勝率6位以下の下に断層がある</span>
                       </label>
                     </div>
                   </div>
 
-                  {/* 期待値馬関連 */}
+                  {/* 条件2：断層の数 */}
+                  <div>
+                    <h3 className="text-base md:text-lg font-bold text-gray-700 mb-3 flex items-center gap-2">
+                      <span>🔢</span>
+                      条件2：断層の数（単一選択）
+                    </h3>
+                    <div className="pl-6">
+                      <div className="space-y-2">
+                        <label className="flex items-center gap-3 cursor-pointer p-2 hover:bg-purple-50 rounded-lg transition">
+                          <input
+                            type="radio"
+                            name="gapCount"
+                            checked={advancedFilters.gapCount === 'any'}
+                            onChange={() => setAdvancedFilters({ ...advancedFilters, gapCount: 'any' })}
+                            className="w-5 h-5 accent-purple-500"
+                          />
+                          <span className="text-sm font-bold text-gray-700">制限なし</span>
+                        </label>
+                        <label className="flex items-center gap-3 cursor-pointer p-2 hover:bg-purple-50 rounded-lg transition">
+                          <input
+                            type="radio"
+                            name="gapCount"
+                            checked={advancedFilters.gapCount === 'exactly1'}
+                            onChange={() => setAdvancedFilters({ ...advancedFilters, gapCount: 'exactly1' })}
+                            className="w-5 h-5 accent-purple-500"
+                          />
+                          <span className="text-sm font-bold text-gray-700">正確に1つ</span>
+                        </label>
+                        <label className="flex items-center gap-3 cursor-pointer p-2 hover:bg-purple-50 rounded-lg transition">
+                          <input
+                            type="radio"
+                            name="gapCount"
+                            checked={advancedFilters.gapCount === 'exactly2'}
+                            onChange={() => setAdvancedFilters({ ...advancedFilters, gapCount: 'exactly2' })}
+                            className="w-5 h-5 accent-purple-500"
+                          />
+                          <span className="text-sm font-bold text-gray-700">正確に2つ</span>
+                        </label>
+                        <label className="flex items-center gap-3 cursor-pointer p-2 hover:bg-purple-50 rounded-lg transition">
+                          <input
+                            type="radio"
+                            name="gapCount"
+                            checked={advancedFilters.gapCount === '3plus'}
+                            onChange={() => setAdvancedFilters({ ...advancedFilters, gapCount: '3plus' })}
+                            className="w-5 h-5 accent-purple-500"
+                          />
+                          <span className="text-sm font-bold text-gray-700">3つ以上</span>
+                        </label>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 条件3：特殊な馬の存在 */}
                   <div>
                     <h3 className="text-base md:text-lg font-bold text-gray-700 mb-3 flex items-center gap-2">
                       <span>⭐</span>
-                      期待値馬関連
+                      条件3：特殊な馬の存在（複数選択可）
                     </h3>
                     <div className="space-y-2 pl-6">
                       <label className="flex items-center gap-3 cursor-pointer p-2 hover:bg-yellow-50 rounded-lg transition">
                         <input
                           type="checkbox"
-                          checked={advancedFilters.hasExpectation}
-                          onChange={(e) => setAdvancedFilters({ ...advancedFilters, hasExpectation: e.target.checked })}
+                          checked={advancedFilters.specialHorses.hasExpectation}
+                          onChange={(e) => setAdvancedFilters({
+                            ...advancedFilters,
+                            specialHorses: { ...advancedFilters.specialHorses, hasExpectation: e.target.checked }
+                          })}
                           className="w-5 h-5 accent-yellow-500"
                         />
                         <span className="text-sm font-bold text-gray-700">期待値150以上の馬がいる</span>
@@ -2550,8 +2713,11 @@ const HorseAnalysisApp = () => {
                       <label className="flex items-center gap-3 cursor-pointer p-2 hover:bg-yellow-50 rounded-lg transition">
                         <input
                           type="checkbox"
-                          checked={advancedFilters.hasSuperExp}
-                          onChange={(e) => setAdvancedFilters({ ...advancedFilters, hasSuperExp: e.target.checked })}
+                          checked={advancedFilters.specialHorses.hasSuperExp}
+                          onChange={(e) => setAdvancedFilters({
+                            ...advancedFilters,
+                            specialHorses: { ...advancedFilters.specialHorses, hasSuperExp: e.target.checked }
+                          })}
                           className="w-5 h-5 accent-yellow-500"
                         />
                         <span className="text-sm font-bold text-gray-700">超期待値馬（220以上）がいる</span>
@@ -2559,8 +2725,11 @@ const HorseAnalysisApp = () => {
                       <label className="flex items-center gap-3 cursor-pointer p-2 hover:bg-yellow-50 rounded-lg transition">
                         <input
                           type="checkbox"
-                          checked={advancedFilters.hasAiRec}
-                          onChange={(e) => setAdvancedFilters({ ...advancedFilters, hasAiRec: e.target.checked })}
+                          checked={advancedFilters.specialHorses.hasAiRec}
+                          onChange={(e) => setAdvancedFilters({
+                            ...advancedFilters,
+                            specialHorses: { ...advancedFilters.specialHorses, hasAiRec: e.target.checked }
+                          })}
                           className="w-5 h-5 accent-yellow-500"
                         />
                         <span className="text-sm font-bold text-gray-700">AIおすすめ馬がいる</span>
@@ -2568,18 +2737,21 @@ const HorseAnalysisApp = () => {
                     </div>
                   </div>
 
-                  {/* 結果関連 */}
+                  {/* 条件4：的中結果 */}
                   <div>
                     <h3 className="text-base md:text-lg font-bold text-gray-700 mb-3 flex items-center gap-2">
                       <span>🏆</span>
-                      結果関連
+                      条件4：的中結果（複数選択可）
                     </h3>
                     <div className="space-y-2 pl-6">
                       <label className="flex items-center gap-3 cursor-pointer p-2 hover:bg-green-50 rounded-lg transition">
                         <input
                           type="checkbox"
-                          checked={advancedFilters.tanshoHit}
-                          onChange={(e) => setAdvancedFilters({ ...advancedFilters, tanshoHit: e.target.checked })}
+                          checked={advancedFilters.resultFilter.tanshoHit}
+                          onChange={(e) => setAdvancedFilters({
+                            ...advancedFilters,
+                            resultFilter: { ...advancedFilters.resultFilter, tanshoHit: e.target.checked }
+                          })}
                           className="w-5 h-5 accent-green-500"
                         />
                         <span className="text-sm font-bold text-gray-700">単勝的中したレース</span>
@@ -2587,8 +2759,11 @@ const HorseAnalysisApp = () => {
                       <label className="flex items-center gap-3 cursor-pointer p-2 hover:bg-green-50 rounded-lg transition">
                         <input
                           type="checkbox"
-                          checked={advancedFilters.fukushoHit}
-                          onChange={(e) => setAdvancedFilters({ ...advancedFilters, fukushoHit: e.target.checked })}
+                          checked={advancedFilters.resultFilter.fukushoHit}
+                          onChange={(e) => setAdvancedFilters({
+                            ...advancedFilters,
+                            resultFilter: { ...advancedFilters.resultFilter, fukushoHit: e.target.checked }
+                          })}
                           className="w-5 h-5 accent-green-500"
                         />
                         <span className="text-sm font-bold text-gray-700">複勝的中したレース</span>
@@ -2596,11 +2771,14 @@ const HorseAnalysisApp = () => {
                       <label className="flex items-center gap-3 cursor-pointer p-2 hover:bg-red-50 rounded-lg transition">
                         <input
                           type="checkbox"
-                          checked={advancedFilters.miss}
-                          onChange={(e) => setAdvancedFilters({ ...advancedFilters, miss: e.target.checked })}
+                          checked={advancedFilters.resultFilter.miss}
+                          onChange={(e) => setAdvancedFilters({
+                            ...advancedFilters,
+                            resultFilter: { ...advancedFilters.resultFilter, miss: e.target.checked }
+                          })}
                           className="w-5 h-5 accent-red-500"
                         />
-                        <span className="text-sm font-bold text-gray-700">不的中レース</span>
+                        <span className="text-sm font-bold text-gray-700">不的中レース（単勝も複勝も外れ）</span>
                       </label>
                     </div>
                   </div>
@@ -2623,15 +2801,25 @@ const HorseAnalysisApp = () => {
                   <button
                     onClick={() => {
                       setAdvancedFilters({
-                        gapsAbove3: false,
-                        gaps2Plus: false,
-                        gaps3Plus: false,
-                        hasExpectation: false,
-                        hasSuperExp: false,
-                        hasAiRec: false,
-                        tanshoHit: false,
-                        fukushoHit: false,
-                        miss: false
+                        gapPositions: {
+                          after1st: false,
+                          after2nd: false,
+                          after3rd: false,
+                          after4th: false,
+                          after5th: false,
+                          after6th: false
+                        },
+                        gapCount: 'any',
+                        specialHorses: {
+                          hasExpectation: false,
+                          hasSuperExp: false,
+                          hasAiRec: false
+                        },
+                        resultFilter: {
+                          tanshoHit: false,
+                          fukushoHit: false,
+                          miss: false
+                        }
                       });
                     }}
                     className="flex-1 px-6 py-3 bg-gray-300 text-gray-800 rounded-full font-bold hover:bg-gray-400 transition"
