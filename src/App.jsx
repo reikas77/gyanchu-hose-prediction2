@@ -850,30 +850,38 @@ const HorseAnalysisApp = () => {
   };
 
   const saveExcludeSettings = () => {
-    const raceRef = ref(database, `races/${currentRace.firebaseId}`);
-    set(raceRef, {
-      ...currentRace,
-      excluded: excludedHorses
-    });
-    setCurrentRace({
-      ...currentRace,
-      excluded: excludedHorses
-    });
-    setShowExcludeModal(false);
+    // 部分更新を使用
+    const excludedRef = ref(database, `races/${currentRace.firebaseId}/excluded`);
+    set(excludedRef, excludedHorses)
+      .then(() => {
+        setCurrentRace({
+          ...currentRace,
+          excluded: excludedHorses
+        });
+        setShowExcludeModal(false);
+      })
+      .catch((error) => {
+        console.error('除外設定の保存に失敗:', error);
+        window.alert('除外設定の保存に失敗しました');
+      });
   };
 
   const saveExpCoefficient = () => {
     setExpCoefficient(tempExpCoefficient);
-    const raceRef = ref(database, `races/${currentRace.firebaseId}`);
-    set(raceRef, {
-      ...currentRace,
-      expCoefficient: tempExpCoefficient
-    });
-    setCurrentRace({
-      ...currentRace,
-      expCoefficient: tempExpCoefficient
-    });
-    setShowExpModal(false);
+    // 部分更新を使用
+    const expCoeffRef = ref(database, `races/${currentRace.firebaseId}/expCoefficient`);
+    set(expCoeffRef, tempExpCoefficient)
+      .then(() => {
+        setCurrentRace({
+          ...currentRace,
+          expCoefficient: tempExpCoefficient
+        });
+        setShowExpModal(false);
+      })
+      .catch((error) => {
+        console.error('EXP係数の保存に失敗:', error);
+        window.alert('EXP係数の保存に失敗しました');
+      });
   };
 
   // 🔒 パスコード認証処理
@@ -887,6 +895,14 @@ const HorseAnalysisApp = () => {
       setOddsInput(selectedLockedRace.odds || {});
       setExcludedHorses(selectedLockedRace.excluded || {});
       setExpCoefficient(selectedLockedRace.expCoefficient || 0.1);
+      setHorseMarks(selectedLockedRace.horseMarks || {});  // ← 印の読み込み
+      
+      // デバッグ用ログ
+      console.log('パスコード認証後、レースを読み込み:', {
+        raceId: selectedLockedRace.firebaseId,
+        raceName: selectedLockedRace.name,
+        horseMarks: selectedLockedRace.horseMarks
+      });
       
       // 足切り偏差値設定を読み込む
       if (selectedLockedRace.cutoffDeviations) {
@@ -942,7 +958,14 @@ const HorseAnalysisApp = () => {
       setOddsInput(race.odds || {});
       setExcludedHorses(race.excluded || {});
       setExpCoefficient(race.expCoefficient || 0.1);
-      setHorseMarks(race.horseMarks || {});
+      setHorseMarks(race.horseMarks || {});  // ← 印の読み込み
+      
+      // デバッグ用ログ
+      console.log('レースを読み込み:', {
+        raceId: race.firebaseId,
+        raceName: race.name,
+        horseMarks: race.horseMarks
+      });
       
       // 足切り偏差値設定を読み込む
       if (race.cutoffDeviations) {
@@ -1027,6 +1050,32 @@ const HorseAnalysisApp = () => {
     setRenamingCourseKey(courseKey);
     setNewCourseName(courseKey);
     setShowRenameCourseModal(true);
+  };
+
+  // 🔧 印データを初期化（全レースに空の印データを追加）
+  const initializeHorseMarks = () => {
+    if (!window.confirm('全レースに空の印データを追加しますか？\n（既存の印は保持されます）')) {
+      return;
+    }
+    
+    let updatedCount = 0;
+    const promises = races.map(race => {
+      if (!race.horseMarks && race.firebaseId) {
+        const raceRef = ref(database, `races/${race.firebaseId}/horseMarks`);
+        updatedCount++;
+        return set(raceRef, {});
+      }
+      return Promise.resolve();
+    });
+    
+    Promise.all(promises)
+      .then(() => {
+        window.alert(`✅ 印データの初期化が完了しました\n（${updatedCount}件のレースを更新）`);
+      })
+      .catch((error) => {
+        console.error('印データの初期化に失敗:', error);
+        window.alert('❌ 印データの初期化に失敗しました');
+      });
   };
 
   // 📝 コース設定名を保存
@@ -2638,17 +2687,19 @@ const HorseAnalysisApp = () => {
     };
     setCutoffDeviations(newCutoffDeviations);
     
-    // 自動保存
+    // 自動保存（部分更新を使用）
     if (currentRace && currentRace.firebaseId) {
-      const raceRef = ref(database, `races/${currentRace.firebaseId}`);
-      set(raceRef, {
-        ...currentRace,
-        cutoffDeviations: newCutoffDeviations
-      });
-      setCurrentRace({
-        ...currentRace,
-        cutoffDeviations: newCutoffDeviations
-      });
+      const cutoffRef = ref(database, `races/${currentRace.firebaseId}/cutoffDeviations`);
+      set(cutoffRef, newCutoffDeviations)
+        .then(() => {
+          setCurrentRace({
+            ...currentRace,
+            cutoffDeviations: newCutoffDeviations
+          });
+        })
+        .catch((error) => {
+          console.error('足切り偏差値の保存に失敗:', error);
+        });
     }
   };
 
@@ -2676,44 +2727,53 @@ const HorseAnalysisApp = () => {
     const tanshoDic = resultNums[0] === top1.horseNum ? 'hit' : 'miss';
     const fukushoHit = resultNums.slice(0, 3).includes(top1.horseNum) ? 'hit' : 'miss';
 
-    const raceRef = ref(database, `races/${currentRace.firebaseId}`);
-    set(raceRef, {
-      ...currentRace,
-      result: {
-        ranking: resultRanking,
-        tansho: tanshoDic,
-        fukusho: fukushoHit
-      }
-    });
-
-    setCurrentRace({
-      ...currentRace,
-      result: {
-        ranking: resultRanking,
-        tansho: tanshoDic,
-        fukusho: fukushoHit
-      }
-    });
-    setResultRanking('');
-    setShowResultModal(false);
+    // 部分更新を使用
+    const resultRef = ref(database, `races/${currentRace.firebaseId}/result`);
+    const newResult = {
+      ranking: resultRanking,
+      tansho: tanshoDic,
+      fukusho: fukushoHit
+    };
+    
+    set(resultRef, newResult)
+      .then(() => {
+        setCurrentRace({
+          ...currentRace,
+          result: newResult
+        });
+        setResultRanking('');
+        setShowResultModal(false);
+      })
+      .catch((error) => {
+        console.error('結果の保存に失敗:', error);
+        window.alert('結果の保存に失敗しました');
+      });
   };
 
   const updateRaceOdds = (odds) => {
-    const raceRef = ref(database, `races/${currentRace.firebaseId}`);
-    set(raceRef, {
-      ...currentRace,
-      odds
-    });
-    setCurrentRace({ ...currentRace, odds });
+    // 部分更新を使用
+    const oddsRef = ref(database, `races/${currentRace.firebaseId}/odds`);
+    set(oddsRef, odds)
+      .then(() => {
+        setCurrentRace({ ...currentRace, odds });
+      })
+      .catch((error) => {
+        console.error('オッズの保存に失敗:', error);
+        window.alert('オッズの保存に失敗しました');
+      });
   };
 
   const updateRaceMemo = (newMemo) => {
-    const raceRef = ref(database, `races/${currentRace.firebaseId}`);
-    set(raceRef, {
-      ...currentRace,
-      memo: newMemo
-    });
-    setCurrentRace({ ...currentRace, memo: newMemo });
+    // 部分更新を使用
+    const memoRef = ref(database, `races/${currentRace.firebaseId}/memo`);
+    set(memoRef, newMemo)
+      .then(() => {
+        setCurrentRace({ ...currentRace, memo: newMemo });
+      })
+      .catch((error) => {
+        console.error('メモの保存に失敗:', error);
+        window.alert('メモの保存に失敗しました');
+      });
   };
 
   // 🎯 勝率の断層を検出する関数
@@ -4447,6 +4507,16 @@ const HorseAnalysisApp = () => {
                         このボタンを押すと全員に最新版への更新が促されます
                       </p>
                     </div>
+                    
+                    <button
+                      onClick={initializeHorseMarks}
+                      className="w-full px-4 py-2 bg-gradient-to-r from-blue-400 to-blue-500 text-white rounded-full font-bold text-sm shadow-lg hover:shadow-2xl hover:scale-105 transition mt-4"
+                    >
+                      🔧 印データを初期化（全レース）
+                    </button>
+                    <p className="text-xs text-gray-600 mt-2 text-center">
+                      全レースに空の印データを追加します（既存の印は保持されます）
+                    </p>
                   </div>
                 )}
 
@@ -5239,17 +5309,33 @@ const HorseAnalysisApp = () => {
                     } else {
                       delete newMarks[editingHorseMark];
                     }
-                    setHorseMarks(newMarks);
                     
-                    // Firebaseに保存
-                    const raceRef = ref(database, `races/${currentRace.firebaseId}`);
-                    set(raceRef, {
-                      ...currentRace,
-                      horseMarks: newMarks
-                    });
-                    
-                    setEditingHorseMark(null);
-                    setTempHorseMark('');
+                    // Firebaseに直接保存（部分更新を使用）
+                    const raceRef = ref(database, `races/${currentRace.firebaseId}/horseMarks`);
+                    set(raceRef, newMarks)
+                      .then(() => {
+                        // ローカルステートも更新
+                        setHorseMarks(newMarks);
+                        setCurrentRace({
+                          ...currentRace,
+                          horseMarks: newMarks
+                        });
+                        
+                        setEditingHorseMark(null);
+                        setTempHorseMark('');
+                        
+                        console.log('印を保存しました:', {
+                          raceId: currentRace.firebaseId,
+                          raceName: currentRace.name,
+                          horseNum: editingHorseMark,
+                          mark: tempHorseMark.trim(),
+                          allMarks: newMarks
+                        });
+                      })
+                      .catch((error) => {
+                        console.error('印の保存に失敗:', error);
+                        window.alert('印の保存に失敗しました');
+                      });
                   }}
                   className="flex-1 px-6 py-3 bg-gradient-to-r from-purple-500 to-indigo-500 text-white rounded-full font-bold shadow-lg hover:shadow-2xl transition"
                 >
