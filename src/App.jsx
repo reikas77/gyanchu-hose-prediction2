@@ -293,6 +293,7 @@ const HorseAnalysisApp = () => {
   const [showFactorAnalysisModal, setShowFactorAnalysisModal] = useState(false);
   const [selectedAnalysisCourse, setSelectedAnalysisCourse] = useState(null);
   const [factorAnalysisResults, setFactorAnalysisResults] = useState(null);
+  const [analysisDateFilter, setAnalysisDateFilter] = useState(null);
 
   // ソート・フィルター用のstate
   const [upcomingSortBy, setUpcomingSortBy] = useState('startTime'); // 'startTime' or 'createdAt'
@@ -2173,6 +2174,7 @@ const HorseAnalysisApp = () => {
     let tanshoHits = 0;
     let fukushoHits = 0;
     let tanshoReturn = 0; // 追加：単勝回収額
+    let validRaces = 0;  // 有効なレース数（分母）
 
     recordedRaces.forEach(race => {
       const raceWinRates = calculateWinRate(race.horses, race.courseKey);
@@ -2181,6 +2183,7 @@ const HorseAnalysisApp = () => {
       
       if (statsType === 'winrate') {
         targetHorse = raceWinRates[0];
+        validRaces++;  // 勝率1位は必ず存在
       } else if (statsType === 'expectation') {
         const candidates = raceWinRates
           .map(horse => {
@@ -2192,6 +2195,10 @@ const HorseAnalysisApp = () => {
           .sort((a, b) => b.expectation - a.expectation);
         
         targetHorse = candidates[0] || null;
+        
+        // 期待値馬がいない場合はこのレースをスキップ
+        if (!targetHorse) return;
+        validRaces++;
       } else if (statsType === 'ai') {
         const candidates = raceWinRates
           .filter(horse => {
@@ -2202,6 +2209,10 @@ const HorseAnalysisApp = () => {
           .sort((a, b) => b.winRate - a.winRate);
         
         targetHorse = candidates[0] || null;
+        
+        // AIおすすめ馬がいない場合はこのレースをスキップ
+        if (!targetHorse) return;
+        validRaces++;
       }
       
       if (!targetHorse) return;
@@ -2227,18 +2238,21 @@ const HorseAnalysisApp = () => {
       }
     });
 
-    // 回収率を計算（投資額 = レース数 × 100円）
-    const investment = recordedRaces.length * 100;
+    // 有効なレース数がゼロの場合
+    if (validRaces === 0) return null;
+
+    // 回収率を計算（投資額 = 有効レース数 × 100円）
+    const investment = validRaces * 100;
     const recoveryRate = ((tanshoReturn / investment) * 100).toFixed(1);
 
     return {
-      total: recordedRaces.length,
+      total: validRaces,  // 分母を validRaces に変更
       tansho: { 
         hits: tanshoHits, 
-        rate: ((tanshoHits / recordedRaces.length) * 100).toFixed(1),
+        rate: ((tanshoHits / validRaces) * 100).toFixed(1),
         recovery: recoveryRate
       },
-      fukusho: { hits: fukushoHits, rate: ((fukushoHits / recordedRaces.length) * 100).toFixed(1) }
+      fukusho: { hits: fukushoHits, rate: ((fukushoHits / validRaces) * 100).toFixed(1) }
     };
   };
 
@@ -2276,12 +2290,85 @@ const HorseAnalysisApp = () => {
     }
   }, [races]);
 
+  // 買い目の的中判定関数
+  const checkBettingHit = (bet, result) => {
+    if (!bet || !result || !result.ranking) return false;
+    
+    const ranking = result.ranking.split(/[\s\-,]/).map(r => parseInt(r)).filter(n => !isNaN(n));
+    
+    if (ranking.length === 0) return false;
+    
+    // bet.typeに応じて判定
+    switch (bet.type) {
+      case '単勝':
+        return ranking[0] === parseInt(bet.horses[0]);
+      
+      case 'ワイド':
+        const wideHorses = bet.horses[0].split('-').map(h => parseInt(h));
+        return wideHorses.every(h => ranking.slice(0, 3).includes(h));
+      
+      case '馬連BOX':
+        const barenBoxHorses = bet.horses[0].split(',').map(h => parseInt(h));
+        return barenBoxHorses.every(h => ranking.slice(0, 2).includes(h));
+      
+      case '馬単マルチ':
+        return bet.horses.some(horseStr => {
+          const parts = horseStr.split('⇔').map(h => parseInt(h));
+          return parts.every(h => ranking.slice(0, 2).includes(h));
+        });
+      
+      case '馬単':
+        const parts = bet.horses[0].split('→').map(h => parseInt(h));
+        return parts.length === 2 && ranking[0] === parts[0] && ranking[1] === parts[1];
+      
+      case '3連複BOX':
+      case '3連複フォーメーション':
+      case '3連複2頭軸':
+        // 買い目に含まれるすべての馬番を抽出
+        const allHorseNums = new Set();
+        bet.horses.forEach(horseStr => {
+          const nums = horseStr.match(/\d+/g);
+          if (nums) {
+            nums.forEach(n => allHorseNums.add(parseInt(n)));
+          }
+        });
+        // 上位3頭にすべて含まれているか判定
+        return Array.from(allHorseNums).every(h => ranking.slice(0, 3).includes(h));
+      
+      case '3連単BOX':
+      case '3連単フォーメーション':
+        // 買い目に含まれるすべての馬番を抽出
+        const allHorseNumsExact = new Set();
+        bet.horses.forEach(horseStr => {
+          const nums = horseStr.match(/\d+/g);
+          if (nums) {
+            nums.forEach(n => allHorseNumsExact.add(parseInt(n)));
+          }
+        });
+        // 上位3頭にすべて含まれているか判定（厳密には着順も確認すべきだが、簡易的に）
+        return Array.from(allHorseNumsExact).every(h => ranking.slice(0, 3).includes(h));
+      
+      default:
+        return false;
+    }
+  };
+
   // ✨ ファクター毎の的中率分析関数
-  const calculateFactorStats = (courseKey = null) => {
+  const calculateFactorStats = (courseKey = null, dateFilter = null) => {
     let recordedRaces = races.filter(r => r.result && r.odds && Object.keys(r.odds).length > 0);
     
     if (courseKey && courseKey !== 'all') {
       recordedRaces = recordedRaces.filter(r => r.courseKey === courseKey);
+    }
+    
+    // 日付フィルター追加
+    if (dateFilter) {
+      recordedRaces = recordedRaces.filter(r => {
+        if (!r.createdAt) return false;
+        // r.createdAt が "2024/11/7" のような形式の場合
+        const raceDate = new Date(r.createdAt).toISOString().split('T')[0];
+        return raceDate === dateFilter;
+      });
     }
     
     if (recordedRaces.length === 0) return null;
@@ -2296,6 +2383,14 @@ const HorseAnalysisApp = () => {
       '斤量': { tansho: 0, fukusho: 0, total: 0 },
       '調教': { tansho: 0, fukusho: 0, total: 0 }
     };
+    
+    // 買い目統計
+    const bettingStats = {
+      total: 0,
+      hit: 0,
+      miss: 0,
+      hitRate: '0.0'
+    };
 
     recordedRaces.forEach(race => {
       const ranking = race.result.ranking.split(/[\s\-,]/);
@@ -2305,6 +2400,17 @@ const HorseAnalysisApp = () => {
       }).filter(n => n !== null);
 
       if (resultNums.length === 0) return;
+
+      // 買い目判定を追加
+      if (race.generatedBet) {
+        bettingStats.total++;
+        const wasHit = checkBettingHit(race.generatedBet, race.result);
+        if (wasHit) {
+          bettingStats.hit++;
+        } else {
+          bettingStats.miss++;
+        }
+      }
 
       Object.keys(factorStats).forEach(factorKey => {
         const activeHorses = race.horses.filter(h => !race.excluded || !race.excluded[h.horseNum]);
@@ -2329,6 +2435,11 @@ const HorseAnalysisApp = () => {
         }
       });
     });
+    
+    // 的中率計算
+    if (bettingStats.total > 0) {
+      bettingStats.hitRate = ((bettingStats.hit / bettingStats.total) * 100).toFixed(1);
+    }
 
     const result = {};
     Object.entries(factorStats).forEach(([factor, stats]) => {
@@ -2339,7 +2450,7 @@ const HorseAnalysisApp = () => {
       };
     });
 
-    return { results: result, recordedRacesCount: recordedRaces.length };
+    return { results: result, recordedRacesCount: recordedRaces.length, bettingStats: bettingStats };
   };
 
   // 🏟️ コース設定の一覧を取得
@@ -2354,7 +2465,7 @@ const HorseAnalysisApp = () => {
   };
 
   const handleAnalyzeFactors = () => {
-    const analysisResults = calculateFactorStats(selectedAnalysisCourse);
+    const analysisResults = calculateFactorStats(selectedAnalysisCourse, analysisDateFilter);
     setFactorAnalysisResults(analysisResults);
   };
 
@@ -2750,52 +2861,52 @@ const HorseAnalysisApp = () => {
                   {activeTab === 'races-past' && (
                     <div className="mb-4 space-y-3">
                       <div className="flex gap-2 items-center flex-wrap">
-                        <span className="text-xs md:text-sm font-bold text-gray-700">ソート:</span>
+                      <span className="text-xs md:text-sm font-bold text-gray-700">ソート:</span>
+                      <button
+                        onClick={() => setPastSortBy('newest')}
+                        className={`px-3 py-1.5 rounded-full text-xs md:text-sm font-bold transition ${
+                          pastSortBy === 'newest'
+                            ? 'bg-purple-400 text-white'
+                            : 'bg-gray-200 text-gray-800 hover:bg-gray-300'
+                        }`}
+                      >
+                        新しい順
+                      </button>
+                      <button
+                        onClick={() => setPastSortBy('oldest')}
+                        className={`px-3 py-1.5 rounded-full text-xs md:text-sm font-bold transition ${
+                          pastSortBy === 'oldest'
+                            ? 'bg-purple-400 text-white'
+                            : 'bg-gray-200 text-gray-800 hover:bg-gray-300'
+                        }`}
+                      >
+                        古い順
+                      </button>
+                      <span className="text-xs md:text-sm font-bold text-gray-700 ml-2">コース:</span>
+                      <button
+                        onClick={() => setPastFilterCourse(null)}
+                        className={`px-3 py-1.5 rounded-full text-xs md:text-sm font-bold transition ${
+                          pastFilterCourse === null
+                            ? 'bg-purple-400 text-white'
+                            : 'bg-gray-200 text-gray-800 hover:bg-gray-300'
+                        }`}
+                      >
+                        全て
+                      </button>
+                      {Array.from(new Set(races.filter(r => r.result && r.courseKey).map(r => r.courseKey))).sort().map(course => (
                         <button
-                          onClick={() => setPastSortBy('newest')}
+                          key={course}
+                          onClick={() => setPastFilterCourse(course)}
                           className={`px-3 py-1.5 rounded-full text-xs md:text-sm font-bold transition ${
-                            pastSortBy === 'newest'
+                            pastFilterCourse === course
                               ? 'bg-purple-400 text-white'
                               : 'bg-gray-200 text-gray-800 hover:bg-gray-300'
                           }`}
                         >
-                          新しい順
+                          {course}
                         </button>
-                        <button
-                          onClick={() => setPastSortBy('oldest')}
-                          className={`px-3 py-1.5 rounded-full text-xs md:text-sm font-bold transition ${
-                            pastSortBy === 'oldest'
-                              ? 'bg-purple-400 text-white'
-                              : 'bg-gray-200 text-gray-800 hover:bg-gray-300'
-                          }`}
-                        >
-                          古い順
-                        </button>
-                        <span className="text-xs md:text-sm font-bold text-gray-700 ml-2">コース:</span>
-                        <button
-                          onClick={() => setPastFilterCourse(null)}
-                          className={`px-3 py-1.5 rounded-full text-xs md:text-sm font-bold transition ${
-                            pastFilterCourse === null
-                              ? 'bg-purple-400 text-white'
-                              : 'bg-gray-200 text-gray-800 hover:bg-gray-300'
-                          }`}
-                        >
-                          全て
-                        </button>
-                        {Array.from(new Set(races.filter(r => r.result && r.courseKey).map(r => r.courseKey))).sort().map(course => (
-                          <button
-                            key={course}
-                            onClick={() => setPastFilterCourse(course)}
-                            className={`px-3 py-1.5 rounded-full text-xs md:text-sm font-bold transition ${
-                              pastFilterCourse === course
-                                ? 'bg-purple-400 text-white'
-                                : 'bg-gray-200 text-gray-800 hover:bg-gray-300'
-                            }`}
-                          >
-                            {course}
-                          </button>
-                        ))}
-                      </div>
+                      ))}
+                    </div>
                       {isAdmin && (
                         <div className="flex items-center gap-2">
                           <button
@@ -3231,11 +3342,17 @@ const HorseAnalysisApp = () => {
                       </div>
                     </div>
                   </div>
+                  <p className="text-xs text-gray-600 mt-4 text-center font-bold">
+                    ※ {statsType === 'expectation' && '期待値馬がいる'}
+                    {statsType === 'ai' && 'AIおすすめ馬がいる'}
+                    {statsType === 'winrate' && ''}
+                    {statsType !== 'winrate' && 'レースのみを集計対象としています'}
+                  </p>
                 </div>
               ) : (
                 <p className="text-gray-500 text-center py-12 text-sm md:text-lg">
-                  {statsType === 'expectation' && '期待値馬がいるレースの結果がまだありません'}
-                  {statsType === 'ai' && 'AIおすすめ馬がいるレースの結果がまだありません'}
+                  {statsType === 'expectation' && '期待値馬がいるレースがありません'}
+                  {statsType === 'ai' && 'AIおすすめ馬がいるレースがありません'}
                   {statsType === 'winrate' && '結果が記録されたレースがありません'}
                 </p>
               )}
@@ -3560,6 +3677,21 @@ const HorseAnalysisApp = () => {
                       </p>
                     </div>
 
+                    <div>
+                      <label className="block text-sm font-bold text-gray-700 mb-3">
+                        日付でフィルター（オプション）
+                      </label>
+                      <input
+                        type="date"
+                        value={analysisDateFilter || ''}
+                        onChange={(e) => setAnalysisDateFilter(e.target.value || null)}
+                        className="w-full px-4 py-3 border-2 border-purple-300 rounded-2xl focus:outline-none focus:border-purple-500"
+                      />
+                      <p className="text-xs text-gray-600 mt-2 font-bold">
+                        ※ 特定の日に行われたレースのみを分析対象にできます
+                      </p>
+                    </div>
+
                     <button
                       onClick={handleAnalyzeFactors}
                       className="w-full px-6 py-3 bg-gradient-to-r from-purple-400 to-purple-500 text-white rounded-full font-bold shadow-lg hover:shadow-2xl hover:scale-105 transition flex items-center justify-center gap-2"
@@ -3575,8 +3707,38 @@ const HorseAnalysisApp = () => {
                         📊 対象レース: {factorAnalysisResults.recordedRacesCount}レース
                         {selectedAnalysisCourse && ` (${selectedAnalysisCourse})`}
                         {!selectedAnalysisCourse && ' (全コース)'}
+                        {analysisDateFilter && ` - ${analysisDateFilter}`}
                       </p>
                     </div>
+
+                    {factorAnalysisResults.bettingStats && factorAnalysisResults.bettingStats.total > 0 && (
+                      <div className="mt-6 p-4 bg-gradient-to-r from-cyan-50 to-blue-50 rounded-2xl border-2 border-cyan-300">
+                        <h4 className="font-bold text-gray-800 mb-3">📊 買い目的中率</h4>
+                        <div className="grid grid-cols-3 gap-4">
+                          <div className="text-center">
+                            <div className="text-xs text-gray-600 font-bold">的中率</div>
+                            <div className="text-2xl font-black text-cyan-600">
+                              {factorAnalysisResults.bettingStats.hitRate}%
+                            </div>
+                          </div>
+                          <div className="text-center">
+                            <div className="text-xs text-gray-600 font-bold">的中</div>
+                            <div className="text-xl font-bold text-green-600">
+                              {factorAnalysisResults.bettingStats.hit}回
+                            </div>
+                          </div>
+                          <div className="text-center">
+                            <div className="text-xs text-gray-600 font-bold">不的中</div>
+                            <div className="text-xl font-bold text-red-600">
+                              {factorAnalysisResults.bettingStats.miss}回
+                            </div>
+                          </div>
+                        </div>
+                        <div className="text-xs text-gray-600 mt-2 font-bold text-center">
+                          対象: {factorAnalysisResults.bettingStats.total}レース
+                        </div>
+                      </div>
+                    )}
 
                     <div className="space-y-3">
                       {Object.entries(factorAnalysisResults.results)
@@ -3613,6 +3775,7 @@ const HorseAnalysisApp = () => {
                       onClick={() => {
                         setFactorAnalysisResults(null);
                         setSelectedAnalysisCourse(null);
+                        setAnalysisDateFilter(null);
                       }}
                       className="w-full px-6 py-3 bg-gray-400 text-white rounded-full font-bold hover:bg-gray-500 transition"
                     >
@@ -3626,6 +3789,7 @@ const HorseAnalysisApp = () => {
                     setShowFactorAnalysisModal(false);
                     setFactorAnalysisResults(null);
                     setSelectedAnalysisCourse(null);
+                    setAnalysisDateFilter(null);
                     setActiveTab('races-upcoming');
                   }}
                   className="w-full mt-4 px-6 py-3 bg-gray-300 text-gray-800 rounded-full font-bold hover:bg-gray-400 transition"
@@ -4427,14 +4591,14 @@ const HorseAnalysisApp = () => {
             {Object.entries(selectedFactors).map(([factorKey, isSelected]) => (
               <div key={factorKey} className="flex items-center gap-2 p-2 hover:bg-white rounded-lg transition">
                 <label className="flex items-center gap-2 cursor-pointer flex-1 text-xs md:text-sm">
-                  <input
-                    type="checkbox"
-                    checked={isSelected}
-                    onChange={() => handleFactorToggle(factorKey)}
-                    className="w-4 h-4 accent-pink-500"
-                  />
+                <input
+                  type="checkbox"
+                  checked={isSelected}
+                  onChange={() => handleFactorToggle(factorKey)}
+                  className="w-4 h-4 accent-pink-500"
+                />
                   <span className="font-bold text-gray-700 truncate flex-1">{factorKey}</span>
-                </label>
+              </label>
                 {isAdmin && (
                   <div className="flex items-center gap-1 flex-shrink-0">
                     <input
@@ -5753,3 +5917,4 @@ const HorseAnalysisApp = () => {
 };
 
 export default HorseAnalysisApp;
+
