@@ -1248,8 +1248,617 @@ const HorseAnalysisApp = () => {
     return allDeviations['スピード能力値'] || {};
   };
 
-  // 買い目自動生成
+  // 基準未達の馬を判定する関数
+  const isCutoffFailed = (horse) => {
+    const allFactorDeviations = calculateFactorDeviations(currentRace.horses);
+    const failedFactors = [];
+    Object.keys(cutoffDeviations).forEach(factorKey => {
+      const cutoff = cutoffDeviations[factorKey];
+      if (cutoff !== null && cutoff !== undefined && !isNaN(cutoff)) {
+        const deviation = allFactorDeviations[factorKey]?.[horse.horseNum];
+        if (deviation !== null && deviation !== undefined && !isNaN(deviation)) {
+          if (deviation < cutoff) {
+            failedFactors.push(factorKey);
+          }
+        }
+      }
+    });
+    return failedFactors.length > 0;
+  };
+
+  // 期待値150以上の馬を取得
+  const getExpectationHorses = (horses) => {
+    return horses.filter(h => {
+      const odds = oddsInput[h.horseNum] || 0;
+      return h.winRate >= 10 && odds * h.winRate >= 150;
+    });
+  };
+
+  // 券種の点数を計算する関数
+  const calculateBetPoints = (betType, horses) => {
+    if (betType === '単勝') {
+      return horses.length;
+    } else if (betType === '馬単') {
+      // 馬単: 1着の数 × 2着の数
+      const parts = horses[0].split('→');
+      if (parts.length === 2) {
+        const first = parts[0].split(',').length;
+        const second = parts[1].split(',').length;
+        return first * second;
+      }
+      return 0;
+    } else if (betType === '馬連' || betType === 'ワイド') {
+      // 馬連/ワイド: 組み合わせ数
+      const parts = horses[0].split('-');
+      if (parts.length === 2) {
+        const first = parts[0].split(',').length;
+        const second = parts[1].split(',').length;
+        return first * second;
+      }
+      return 0;
+    } else if (betType === '馬連BOX') {
+      // 馬連BOX: nC2
+      const nums = horses[0].split(',').length;
+      return (nums * (nums - 1)) / 2;
+    } else if (betType === '馬連マルチ') {
+      // 馬連マルチ: 各組み合わせの合計
+      return horses.length;
+    } else if (betType === '3連単BOX') {
+      // 3連単BOX: nP3 = n × (n-1) × (n-2)
+      const nums = horses[0].split(',').length;
+      return nums * (nums - 1) * (nums - 2);
+    } else if (betType === '3連複BOX') {
+      // 3連複BOX: nC3
+      const nums = horses[0].split(',').length;
+      return (nums * (nums - 1) * (nums - 2)) / 6;
+    } else if (betType === '3連単フォーメーション') {
+      // 3連単フォーメーション: 1着 × 2着 × 3着
+      // 「軸:」「相手:」「ヒモ:」の形式にも対応
+      let first = 0, second = 0, third = 0;
+      if (horses[0]?.includes('軸:') || horses[0]?.includes('1着:')) {
+        const firstStr = horses[0].split(':')[1]?.trim() || '';
+        first = firstStr.split(',').filter(s => s.trim()).length;
+      } else {
+        first = horses[0]?.split(':')[1]?.split(',').filter(s => s.trim()).length || 0;
+      }
+      if (horses[1]?.includes('相手:') || horses[1]?.includes('2着:')) {
+        const secondStr = horses[1].split(':')[1]?.trim() || '';
+        second = secondStr.split(',').filter(s => s.trim()).length;
+      } else {
+        second = horses[1]?.split(':')[1]?.split(',').filter(s => s.trim()).length || 0;
+      }
+      if (horses[2]?.includes('ヒモ:') || horses[2]?.includes('3着:')) {
+        const thirdStr = horses[2].split(':')[1]?.trim() || '';
+        third = thirdStr.split(',').filter(s => s.trim()).length;
+      } else {
+        third = horses[2]?.split(':')[1]?.split(',').filter(s => s.trim()).length || 0;
+      }
+      return first * second * third;
+    } else if (betType === '3連複フォーメーション') {
+      // 3連複フォーメーション: 軸1 × 軸2 × 相手（重複除外）
+      if (horses.length >= 3) {
+        const axis1Str = horses[0].split(':')[1]?.trim() || '';
+        const axis2Str = horses[1].split(':')[1]?.trim() || '';
+        const opponentStr = horses[2].split(':')[1]?.trim() || '';
+        
+        const axis1 = axis1Str.split(',').filter(s => s.trim()).length;
+        const axis2 = axis2Str.split(',').filter(s => s.trim()).length;
+        const opponent = opponentStr.split(',').filter(s => s.trim()).length;
+        
+        // 軸1と軸2が同じ場合の処理
+        if (axis1Str === axis2Str) {
+          // 同じ軸を2つ使う場合: nC2 × 相手
+          return (axis1 * (axis1 - 1) / 2) * opponent;
+        } else {
+          // 異なる軸の場合: 軸1 × 軸2 × 相手
+          return axis1 * axis2 * opponent;
+        }
+      }
+      return 0;
+    } else if (betType === '3連複2頭軸') {
+      // 3連複2頭軸: 軸2頭 × 相手
+      const axis = horses[0].split(':')[1]?.split(',').length || 0;
+      const opponent = horses[1]?.split(':')[1]?.split(',').length || 0;
+      return (axis * (axis - 1) / 2) * opponent;
+    }
+    return 0;
+  };
+
+  // 買い目自動生成（新仕様）
   const generateBettingRecommendations = () => {
+    const budget = bettingBudget;
+    const bets = [];
+    
+    if (!currentRace || !currentRace.horses || resultsWithRate.length === 0) {
+      bets.push({
+        type: '情報',
+        horses: [],
+        amount: 0,
+        points: 0,
+        reason: 'レースデータが不足しています',
+        warning: null
+      });
+      setGeneratedBets(bets);
+      return;
+    }
+
+    // 断層を検出
+    const gaps = detectWinRateGaps(resultsWithRate);
+    
+    // 期待値馬を取得
+    const expectationHorses = getExpectationHorses(resultsWithRate);
+    
+    // 基準未達の馬を除外したリスト
+    const nonCutoffFailedHorses = resultsWithRate.filter(h => !isCutoffFailed(h));
+    
+    // 各パターンの判定と買い目生成
+    let planA = null;
+    let planB = null;
+    let planC = null;
+    let needsWarning = false;
+    
+    // ①勝率3位の下に断層があり、断層の数が正確に1つの場合
+    if (gaps.length === 1 && gaps.includes(2)) {
+      const top3 = resultsWithRate.slice(0, 3);
+      const winRate7Plus = resultsWithRate.filter(h => h.winRate >= 7);
+      
+      // A案: 3連複フォーメーション
+      const axisHorses = top3.map(h => h.horseNum).join(',');
+      const opponentHorses = winRate7Plus.map(h => h.horseNum).join(',');
+      // 軸と相手が同じ場合: 3C2 × ヒモ
+      const axisCount = 3;
+      const himoCount = winRate7Plus.length;
+      const pointsA = (axisCount * (axisCount - 1) / 2) * himoCount;
+      planA = {
+        type: '3連複フォーメーション',
+        horses: [`軸: ${axisHorses}`, `相手: ${axisHorses}`, `ヒモ: ${opponentHorses}`],
+        amount: pointsA * 100,
+        points: pointsA,
+        reason: '勝率3位の下に断層、3連複フォーメーション',
+        warning: null
+      };
+      
+      // B案: 馬連BOX
+      const pointsB = calculateBetPoints('馬連BOX', [axisHorses]);
+      planB = {
+        type: '馬連BOX',
+        horses: [axisHorses],
+        amount: pointsB * 100,
+        points: pointsB,
+        reason: '勝率1,2,3位',
+        warning: null
+      };
+      
+      // C案
+      planC = {
+        type: '情報',
+        horses: [],
+        amount: 0,
+        points: 0,
+        reason: '予算不足です。タイミーでバイトしておいで！',
+        warning: null
+      };
+    }
+    // ②勝率4位の下に断層があり、断層の数が正確に1つの場合
+    else if (gaps.length === 1 && gaps.includes(3)) {
+      const top4 = resultsWithRate.slice(0, 4);
+      const top4Nums = top4.map(h => h.horseNum).join(',');
+      
+      // A案: 3連単BOX
+      const pointsA = calculateBetPoints('3連単BOX', [top4Nums]);
+      planA = {
+        type: '3連単BOX',
+        horses: [top4Nums],
+        amount: pointsA * 100,
+        points: pointsA,
+        reason: '上位4頭',
+        warning: null
+      };
+      
+      // B案: 3連複BOX
+      const pointsB = calculateBetPoints('3連複BOX', [top4Nums]);
+      planB = {
+        type: '3連複BOX',
+        horses: [top4Nums],
+        amount: pointsB * 100,
+        points: pointsB,
+        reason: '上位4頭',
+        warning: null
+      };
+      
+      // C案
+      planC = {
+        type: '情報',
+        horses: [],
+        amount: 0,
+        points: 0,
+        reason: 'そんなんじゃコンビニでお弁当も買えないぜ、、、',
+        warning: null
+      };
+    }
+    // ③勝率5位以下の下に断層があり、断層の数が正確に1つの場合
+    else if (gaps.length === 1 && gaps[0] >= 4) {
+      const gapIndex = gaps[0];
+      const aboveGap = resultsWithRate.slice(0, gapIndex + 1);
+      const expAboveGap = aboveGap.filter(h => {
+        const odds = oddsInput[h.horseNum] || 0;
+        return h.winRate >= 10 && odds * h.winRate >= 150;
+      });
+      
+      if (expAboveGap.length > 0) {
+        // A案: 3連単フォーメーション
+        const firstHorse = expAboveGap[0].horseNum;
+        const secondHorses = aboveGap.map(h => h.horseNum).join(',');
+        const thirdHorses = aboveGap.map(h => h.horseNum).join(',');
+        const pointsA = calculateBetPoints('3連単フォーメーション', [
+          `1着: ${firstHorse}`,
+          `2着: ${secondHorses}`,
+          `3着: ${thirdHorses}`
+        ]);
+        planA = {
+          type: '3連単フォーメーション',
+          horses: [`1着: ${firstHorse}`, `2着: ${secondHorses}`, `3着: ${thirdHorses}`],
+          amount: pointsA * 100,
+          points: pointsA,
+          reason: '断層の上に期待値馬あり、3連単フォーメーション',
+          warning: null
+        };
+        
+      // B案: 3連複フォーメーション
+      const axis1 = expAboveGap[0].horseNum;
+      const axis2 = expAboveGap.length > 1 ? expAboveGap[1].horseNum : expAboveGap[0].horseNum;
+      const opponent = aboveGap.map(h => h.horseNum).join(',');
+      // 軸1と軸2が異なる場合: 1 × 1 × 相手
+      // 軸1と軸2が同じ場合: 1C2 × 相手 = 0（ありえない）
+      const opponentCount = aboveGap.length;
+      const pointsB = (axis1 === axis2 ? 0 : 1 * opponentCount);
+      planB = {
+        type: '3連複フォーメーション',
+        horses: [`軸1: ${axis1}`, `軸2: ${axis2}`, `相手: ${opponent}`],
+        amount: pointsB * 100,
+        points: pointsB,
+        reason: '断層の上に期待値馬あり、3連複フォーメーション',
+        warning: null
+      };
+      } else {
+        needsWarning = true;
+      }
+      
+      // C案
+      planC = {
+        type: '情報',
+        horses: [],
+        amount: 0,
+        points: 0,
+        reason: 'ここはある程度予算が必要なレースなんだ、、、ごめんよ、、、',
+        warning: null
+      };
+    }
+    // ④勝率1位の下に断層があり、勝率3位以下の下に断層がある（断層2つ）
+    else if (gaps.length === 2 && gaps.includes(0) && gaps.some(g => g >= 3)) {
+      const top1 = resultsWithRate[0];
+      const secondGapIndex = gaps.find(g => g >= 3);
+      const winRate5Plus = resultsWithRate.filter(h => h.winRate >= 5);
+      const aboveSecondGap = resultsWithRate.slice(0, secondGapIndex + 1);
+      
+      // A案: 3連単フォーメーション
+      const secondHorses = winRate5Plus.map(h => h.horseNum).join(',');
+      const thirdHorses = winRate5Plus.map(h => h.horseNum).join(',');
+      const pointsA = calculateBetPoints('3連単フォーメーション', [
+        `1着: ${top1.horseNum}`,
+        `2着: ${secondHorses}`,
+        `3着: ${thirdHorses}`
+      ]);
+      planA = {
+        type: '3連単フォーメーション',
+        horses: [`1着: ${top1.horseNum}`, `2着: ${secondHorses}`, `3着: ${thirdHorses}`],
+        amount: pointsA * 100,
+        points: pointsA,
+        reason: '勝率1位の下に断層、5%以上の馬に流し',
+        warning: null
+      };
+      
+      // B案: 3連単フォーメーション
+      const secondHorsesB = aboveSecondGap.map(h => h.horseNum).join(',');
+      const pointsB = calculateBetPoints('3連単フォーメーション', [
+        `1着: ${top1.horseNum}`,
+        `2着: ${secondHorsesB}`,
+        `3着: ${thirdHorses}`
+      ]);
+      planB = {
+        type: '3連単フォーメーション',
+        horses: [`1着: ${top1.horseNum}`, `2着: ${secondHorsesB}`, `3着: ${thirdHorses}`],
+        amount: pointsB * 100,
+        points: pointsB,
+        reason: '勝率1位の下に断層、2つ目の断層より上に流し',
+        warning: null
+      };
+      
+      // C案: 単勝
+      planC = {
+        type: '単勝',
+        horses: [`${top1.horseNum}`],
+        amount: 100,
+        points: 1,
+        reason: '勝率1位',
+        warning: null
+      };
+    }
+    // ⑤勝率1位の下に断層があり、勝率2位の下にも断層がある（断層2つ）
+    else if (gaps.length === 2 && gaps.includes(0) && gaps.includes(1)) {
+      const top1 = resultsWithRate[0];
+      const top2 = resultsWithRate[1];
+      const winRate5Plus = resultsWithRate.filter(h => h.winRate >= 5);
+      const top345 = resultsWithRate.slice(2, 5);
+      
+      // A案: 3連単フォーメーション
+      const thirdHorses = winRate5Plus.map(h => h.horseNum).join(',');
+      const pointsA = calculateBetPoints('3連単フォーメーション', [
+        `1着: ${top1.horseNum}`,
+        `2着: ${top2.horseNum}`,
+        `3着: ${thirdHorses}`
+      ]);
+      planA = {
+        type: '3連単フォーメーション',
+        horses: [`1着: ${top1.horseNum}`, `2着: ${top2.horseNum}`, `3着: ${thirdHorses}`],
+        amount: pointsA * 100,
+        points: pointsA,
+        reason: '勝率1,2位の下に断層、5%以上の馬に流し',
+        warning: null
+      };
+      
+      // B案: 3連単フォーメーション
+      const thirdHorsesB = top345.map(h => h.horseNum).join(',');
+      const pointsB = calculateBetPoints('3連単フォーメーション', [
+        `1着: ${top1.horseNum}`,
+        `2着: ${top2.horseNum}`,
+        `3着: ${thirdHorsesB}`
+      ]);
+      planB = {
+        type: '3連単フォーメーション',
+        horses: [`1着: ${top1.horseNum}`, `2着: ${top2.horseNum}`, `3着: ${thirdHorsesB}`],
+        amount: pointsB * 100,
+        points: pointsB,
+        reason: '勝率1,2位の下に断層、3,4,5位に流し',
+        warning: null
+      };
+      
+      // C案: 3連単フォーメーション
+      planC = {
+        type: '3連単フォーメーション',
+        horses: [`1着: ${top1.horseNum}`, `2着: ${top2.horseNum}`, `3着: ${resultsWithRate[2]?.horseNum || ''}`],
+        amount: 100,
+        points: 1,
+        reason: '勝率1,2,3位',
+        warning: null
+      };
+    }
+    // ⑥3つ以上の断層が存在する場合
+    else if (gaps.length >= 3) {
+      const top2 = resultsWithRate.slice(0, 2);
+      const top2Nums = top2.map(h => h.horseNum).join(',');
+      const allNonCutoff = nonCutoffFailedHorses.map(h => h.horseNum).join(',');
+      
+      // A案: 3連単フォーメーション
+      // 軸: 勝率1,2位（2頭）、相手: 勝率1,2位（2頭）、ヒモ: 基準未達以外すべて
+      const axisCount = 2;
+      const opponentCount = 2;
+      const himoCount = nonCutoffFailedHorses.length;
+      const pointsA = axisCount * opponentCount * himoCount;
+      planA = {
+        type: '3連単フォーメーション',
+        horses: [`軸: ${top2Nums}`, `相手: ${top2Nums}`, `ヒモ: ${allNonCutoff}`],
+        amount: pointsA * 100,
+        points: pointsA,
+        reason: '断層3つ以上、基準未達以外すべて',
+        warning: null
+      };
+      
+      // B案: 馬単マルチ
+      const bHorses = [`${top2[0].horseNum}⇔${top2[1].horseNum}`];
+      if (expectationHorses.length > 0 && !top2.some(h => h.horseNum === expectationHorses[0].horseNum)) {
+        bHorses.push(`${top2[0].horseNum}⇔${expectationHorses[0].horseNum}`);
+      }
+      planB = {
+        type: '馬単マルチ',
+        horses: bHorses,
+        amount: bHorses.length * 100,
+        points: bHorses.length,
+        reason: '勝率1位⇔2位' + (expectationHorses.length > 0 ? ' + 期待値馬' : ''),
+        warning: null
+      };
+      
+      // C案: 馬単
+      planC = {
+        type: '馬単',
+        horses: [`${top2[0].horseNum}→${top2[1].horseNum}`],
+        amount: 100,
+        points: 1,
+        reason: '勝率1位→2位',
+        warning: null
+      };
+    }
+    // ⑦断層が存在しない場合
+    else if (gaps.length === 0) {
+      const winRate10Plus = resultsWithRate.filter(h => h.winRate >= 10);
+      const expWinRate10Plus = winRate10Plus.filter(h => {
+        const odds = oddsInput[h.horseNum] || 0;
+        return odds * h.winRate >= 150;
+      });
+      
+      // A案: 3連単BOX
+      const winRate10Nums = winRate10Plus.map(h => h.horseNum).join(',');
+      const pointsA = calculateBetPoints('3連単BOX', [winRate10Nums]);
+      planA = {
+        type: '3連単BOX',
+        horses: [winRate10Nums],
+        amount: pointsA * 100,
+        points: pointsA,
+        reason: '勝率10%以上の馬',
+        warning: null
+      };
+      
+      // B案: 3連複フォーメーション
+      const axis1 = expWinRate10Plus.length > 0 ? expWinRate10Plus[0].horseNum : winRate10Plus[0]?.horseNum;
+      const axis2 = expWinRate10Plus.length > 1 ? expWinRate10Plus[1].horseNum : (expWinRate10Plus.length > 0 ? expWinRate10Plus[0].horseNum : winRate10Plus[1]?.horseNum);
+      const opponent = winRate10Nums;
+      // 軸1と軸2が異なる場合: 1 × 1 × 相手
+      // 軸1と軸2が同じ場合: 1C2 × 相手 = 0（ありえない）
+      const opponentCount = winRate10Plus.length;
+      const pointsB = (axis1 === axis2 ? 0 : 1 * opponentCount);
+      planB = {
+        type: '3連複フォーメーション',
+        horses: [`軸1: ${axis1}`, `軸2: ${axis2}`, `相手: ${opponent}`],
+        amount: pointsB * 100,
+        points: pointsB,
+        reason: '期待値馬を軸に、勝率10%以上',
+        warning: null
+      };
+      
+      // C案: 単勝
+      const bestExp = expWinRate10Plus.length > 0 
+        ? expWinRate10Plus.sort((a, b) => b.winRate - a.winRate)[0]
+        : winRate10Plus.sort((a, b) => b.winRate - a.winRate)[0];
+      planC = {
+        type: '単勝',
+        horses: bestExp ? [`${bestExp.horseNum}`] : [],
+        amount: 100,
+        points: 1,
+        reason: bestExp ? '期待値150以上で最も勝率が高い馬' : '勝率10%以上で最も勝率が高い馬',
+        warning: null
+      };
+    }
+    // ⑧勝率2位の下に断層があり、断層の数が正確に1つの場合
+    else if (gaps.length === 1 && gaps.includes(1)) {
+      const top2 = resultsWithRate.slice(0, 2);
+      const top2Nums = top2.map(h => h.horseNum).join(',');
+      
+      // A案、B案: 3連複2頭軸
+      const opponent = nonCutoffFailedHorses.map(h => h.horseNum).join(',');
+      const pointsAB = calculateBetPoints('3連複2頭軸', [
+        `軸: ${top2Nums}`,
+        `相手: ${opponent}`
+      ]);
+      planA = {
+        type: '3連複2頭軸',
+        horses: [`軸: ${top2Nums}`, `相手: ${opponent}`],
+        amount: pointsAB * 100,
+        points: pointsAB,
+        reason: '勝率1,2位を軸、基準未達以外すべて',
+        warning: null
+      };
+      planB = planA;
+      
+      // C案: ワイド
+      planC = {
+        type: 'ワイド',
+        horses: [`${top2[0].horseNum}-${top2[1].horseNum}`],
+        amount: 100,
+        points: 1,
+        reason: '勝率1位-2位',
+        warning: null
+      };
+    }
+    // ⑨勝率1位の下に断層があり、断層の数が正確に1つの場合
+    else if (gaps.length === 1 && gaps.includes(0)) {
+      const top1 = resultsWithRate[0];
+      const expHorses = expectationHorses.map(h => h.horseNum).join(',');
+      const winRate5Plus = resultsWithRate.filter(h => h.winRate >= 5).map(h => h.horseNum).join(',');
+      
+      // A案: 3連単フォーメーション
+      const pointsA = calculateBetPoints('3連単フォーメーション', [
+        `1着: ${top1.horseNum}`,
+        `2着: ${expHorses || winRate5Plus}`,
+        `3着: ${winRate5Plus}`
+      ]);
+      planA = {
+        type: '3連単フォーメーション',
+        horses: [`1着: ${top1.horseNum}`, `2着: ${expHorses || winRate5Plus}`, `3着: ${winRate5Plus}`],
+        amount: pointsA * 100,
+        points: pointsA,
+        reason: '勝率1位の下に断層、期待値馬または5%以上に流し',
+        warning: null
+      };
+      
+      // B案: 3連複フォーメーション
+      const axis1 = top1.horseNum;
+      const axis2Str = expHorses || winRate5Plus;
+      const axis2Count = expHorses ? expectationHorses.length : resultsWithRate.filter(h => h.winRate >= 5).length;
+      const opponentStr = winRate5Plus;
+      const opponentCount = resultsWithRate.filter(h => h.winRate >= 5).length;
+      // 軸1 × 軸2 × 相手（軸2と相手は重複可能）
+      const pointsB = 1 * axis2Count * opponentCount;
+      planB = {
+        type: '3連複フォーメーション',
+        horses: [`軸: ${axis1}`, `相手1: ${axis2Str}`, `相手2: ${opponentStr}`],
+        amount: pointsB * 100,
+        points: pointsB,
+        reason: '勝率1位を軸、期待値馬または5%以上',
+        warning: null
+      };
+      
+      // C案: 単勝
+      planC = {
+        type: '単勝',
+        horses: [`${top1.horseNum}`],
+        amount: 100,
+        points: 1,
+        reason: '勝率1位',
+        warning: null
+      };
+    }
+    // ⑩該当なし
+    else {
+      bets.push({
+        type: '情報',
+        horses: [],
+        amount: 0,
+        points: 0,
+        reason: '保存された買い目ルール適用外のレースです',
+        warning: null
+      });
+      setGeneratedBets(bets);
+      return;
+    }
+    
+    // 注釈の判定
+    if (planA) {
+      const planAHorses = planA.horses.join(',').match(/\d+/g) || [];
+      const hasCutoffFailed = planAHorses.some(num => {
+        const horse = resultsWithRate.find(h => h.horseNum === parseInt(num));
+        return horse && isCutoffFailed(horse);
+      });
+      const hasExpectation = planAHorses.some(num => {
+        const horse = resultsWithRate.find(h => h.horseNum === parseInt(num));
+        return horse && expectationHorses.some(eh => eh.horseNum === horse.horseNum);
+      });
+      
+      if (hasCutoffFailed || !hasExpectation) {
+        needsWarning = true;
+      }
+    }
+    
+    if (needsWarning) {
+      const warning = "⚠️ 本買い目は期待値に依存していない断層による買い目の提示なので、最終的に下にスクロールし、ギャンさんの買い目が出ている場合はそちらを参考にしたほうがいい可能性があります。";
+      if (planA) planA.warning = warning;
+      if (planB) planB.warning = warning;
+      if (planC) planC.warning = warning;
+    }
+    
+    // 予算に応じてA案、B案、C案を選択
+    if (planA && budget >= planA.amount) {
+      bets.push(planA);
+    } else if (planB && budget >= planB.amount) {
+      bets.push(planB);
+    } else if (planC) {
+      bets.push(planC);
+    }
+    
+    setGeneratedBets(bets);
+  };
+
+  // 旧買い目自動生成（削除予定だが一旦コメントアウト）
+  const generateBettingRecommendationsOld = () => {
     const budget = bettingBudget;
     const bets = [];
 
@@ -4637,15 +5246,27 @@ const HorseAnalysisApp = () => {
                   <div className="space-y-3">
                     {generatedBets.map((bet, idx) => (
                       <div key={idx} className="p-3 md:p-4 bg-gradient-to-r from-cyan-50 to-blue-50 rounded-2xl border-2 border-cyan-300">
+                        {bet.warning && (
+                          <div className="mb-3 p-2 bg-yellow-100 border-2 border-yellow-400 rounded-lg">
+                            <p className="text-xs text-yellow-800 font-bold">{bet.warning}</p>
+                          </div>
+                        )}
                         <div className="flex justify-between items-start mb-2">
-                          <span className="font-bold text-cyan-700 text-sm">{bet.type}</span>
+                          <span className="font-bold text-cyan-700 text-sm md:text-base">{bet.type}</span>
                           {bet.amount > 0 && (
-                            <span className="font-bold text-gray-700 text-sm">{bet.amount}円</span>
+                            <div className="text-right">
+                              <div className="font-bold text-gray-700 text-sm md:text-base">{bet.amount.toLocaleString()}円</div>
+                              {bet.points > 0 && (
+                                <div className="text-xs text-gray-600 font-bold">{bet.points}点</div>
+                              )}
+                            </div>
                           )}
                         </div>
                         {bet.horses.length > 0 && (
-                          <div className="text-xs md:text-sm text-gray-700 font-bold mb-1">
-                            {bet.horses.join(' ')}
+                          <div className="text-xs md:text-sm text-gray-700 font-bold mb-2 space-y-1">
+                            {bet.horses.map((horse, hIdx) => (
+                              <div key={hIdx}>{horse}</div>
+                            ))}
                           </div>
                         )}
                         <div className="text-xs text-gray-600 font-bold">
@@ -4656,7 +5277,10 @@ const HorseAnalysisApp = () => {
                   </div>
                   <div className="mt-4 p-3 bg-cyan-100 rounded-2xl text-sm text-cyan-800 font-bold flex items-center gap-2">
                     <TrophyPixelArt size={18} />
-                    合計: {generatedBets.reduce((sum, bet) => sum + bet.amount, 0)}円
+                    合計: {generatedBets.reduce((sum, bet) => sum + bet.amount, 0).toLocaleString()}円
+                    {generatedBets.reduce((sum, bet) => sum + (bet.points || 0), 0) > 0 && (
+                      <span className="ml-2">({generatedBets.reduce((sum, bet) => sum + (bet.points || 0), 0)}点)</span>
+                    )}
                   </div>
                 </div>
               )}
