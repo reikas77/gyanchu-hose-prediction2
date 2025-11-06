@@ -1140,6 +1140,12 @@ const HorseAnalysisApp = () => {
     
     if (activeHorses.length === 0) return {};
     
+    // デバッグ: 最初の馬のscoresのキー名を確認（管理者のみ）
+    if (isAdmin && activeHorses.length > 0 && activeHorses[0].scores) {
+      const actualKeys = Object.keys(activeHorses[0].scores);
+      console.log('[足切り機能] 実際のscoresキー名:', actualKeys);
+    }
+    
     // 全ファクターのキーリスト
     const factorKeys = ['スピード能力値', 'コース・距離適性', '展開利', '近走安定度', '馬場適性', '騎手', '斤量', '調教'];
     
@@ -1149,7 +1155,17 @@ const HorseAnalysisApp = () => {
     factorKeys.forEach(factorKey => {
       // 各馬の該当ファクターの値を取得
       const values = activeHorses
-        .map(horse => horse.scores && horse.scores[factorKey] ? parseFloat(horse.scores[factorKey]) : null)
+        .map(horse => {
+          // デバッグ: 実際のキー名を確認
+          if (horse.scores) {
+            const actualKeys = Object.keys(horse.scores);
+            // キー名が一致しない場合のフォールバック（念のため）
+            if (!horse.scores[factorKey] && factorKey === 'スピード能力値' && horse.scores['タイム指数']) {
+              return parseFloat(horse.scores['タイム指数']);
+            }
+          }
+          return horse.scores && horse.scores[factorKey] ? parseFloat(horse.scores[factorKey]) : null;
+        })
         .filter(val => val !== null && !isNaN(val));
       
       if (values.length === 0) {
@@ -1164,10 +1180,30 @@ const HorseAnalysisApp = () => {
       const variance = values.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) / values.length;
       const stdDev = Math.sqrt(variance);
       
+      // 標準偏差が0の場合（全ての馬が同じ値）は偏差値を計算できない
+      if (stdDev === 0 || isNaN(stdDev)) {
+        // 全ての馬に偏差値50（平均値）を設定するか、nullを設定
+        const deviationMap = {};
+        activeHorses.forEach(horse => {
+          deviationMap[horse.horseNum] = null; // 偏差値が計算できない場合はnull
+        });
+        deviationsByFactor[factorKey] = deviationMap;
+        return;
+      }
+      
       // 各馬の偏差値を計算
       const deviationMap = {};
       activeHorses.forEach(horse => {
-        const value = horse.scores && horse.scores[factorKey] ? parseFloat(horse.scores[factorKey]) : null;
+        // キー名のフォールバック処理
+        let value = null;
+        if (horse.scores) {
+          if (horse.scores[factorKey]) {
+            value = parseFloat(horse.scores[factorKey]);
+          } else if (factorKey === 'スピード能力値' && horse.scores['タイム指数']) {
+            value = parseFloat(horse.scores['タイム指数']);
+          }
+        }
+        
         if (value !== null && !isNaN(value) && stdDev > 0) {
           deviationMap[horse.horseNum] = 50 + 10 * (value - mean) / stdDev;
         } else {
@@ -3305,10 +3341,22 @@ const HorseAnalysisApp = () => {
               const failedFactors = [];
               Object.keys(cutoffDeviations).forEach(factorKey => {
                 const cutoff = cutoffDeviations[factorKey];
-                if (cutoff !== null && cutoff !== undefined) {
+                // 足切り設定がnull/undefinedの場合は判定から除外
+                if (cutoff !== null && cutoff !== undefined && !isNaN(cutoff)) {
                   const deviation = allFactorDeviations[factorKey]?.[horse.horseNum];
-                  if (deviation === null || deviation === undefined || deviation < cutoff) {
-                    failedFactors.push(factorKey);
+                  // 偏差値が数値として存在する場合のみ判定
+                  // 偏差値がnull/undefinedの場合は、そのファクターの判定から除外（データがないため）
+                  if (deviation !== null && deviation !== undefined && !isNaN(deviation)) {
+                    // 偏差値が基準値未満の場合のみ基準未達
+                    if (deviation < cutoff) {
+                      failedFactors.push(factorKey);
+                    }
+                  }
+                  // 偏差値がnull/undefinedの場合は判定から除外（データがないため基準未達とはしない）
+                  
+                  // デバッグ用ログ（管理者のみ）
+                  if (isAdmin && idx === 0 && horse.horseNum === 1) {
+                    console.log(`[足切り判定] ${factorKey}: 基準=${cutoff}, 偏差値=${deviation}, 判定=${deviation !== null && deviation !== undefined && !isNaN(deviation) ? (deviation < cutoff ? '未達' : '達成') : 'データなし'}`);
                   }
                 }
               });
