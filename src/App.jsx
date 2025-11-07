@@ -1330,49 +1330,16 @@ const HorseAnalysisApp = () => {
         )
       );
 
-      let odds = null;
-      const decimals = numbers.filter(
+      const firstDecimal = numbers.find(
         (n) => n.hasDecimal && n.value >= 1.0 && n.value < 999 && !n.isKinryo
       );
 
-      console.log('  オッズ候補（斤量除外）:', decimals.map((d) => d.value));
-
-      if (decimals.length >= 2) {
-        odds = decimals[decimals.length - 2].value;
-        console.log(`  → オッズ（後ろから2番目の小数）: ${odds}倍`);
-      } else if (decimals.length === 1) {
-        odds = decimals[0].value;
-        console.log(`  → オッズ（唯一の小数）: ${odds}倍`);
+      let odds = null;
+      if (firstDecimal) {
+        odds = firstDecimal.value;
+        console.log(`  → オッズ（最初の小数）: ${odds}倍`);
       } else {
-        const allCandidates = numbers.filter(
-          (n) => n.value >= 1.0 && n.value < 999 && !n.isSmallInt && !n.isKinryo
-        );
-        console.log('  フォールバック候補:', allCandidates.map((c) => c.value));
-
-        if (allCandidates.length >= 2) {
-          odds = allCandidates[allCandidates.length - 2].value;
-          console.log(`  → オッズ（後ろから2番目の数値）: ${odds}倍`);
-        } else if (allCandidates.length === 1) {
-          odds = allCandidates[0].value;
-          console.log(`  → オッズ（唯一の候補）: ${odds}倍`);
-        } else {
-          for (let i = allParts.length - 1; i >= 0; i--) {
-            if (isOddsValue(allParts[i], allParts, i)) {
-              const value = parseFloat(allParts[i]);
-              if (value >= 50.0 && value <= 60.0) {
-                continue;
-              }
-              odds = value;
-              console.log(`  → オッズ（判定フォールバック）: ${odds}倍`);
-              break;
-            }
-          }
-        }
-      }
-
-      if (odds && odds >= 50.0 && odds <= 60.0) {
-        console.warn(`  ⚠️ オッズ${odds}は斤量の可能性が高いため却下`);
-        odds = null;
+        console.warn('  ❌ 小数が見つかりませんでした');
       }
 
       if (odds) {
