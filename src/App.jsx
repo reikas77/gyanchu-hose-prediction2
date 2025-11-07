@@ -235,6 +235,8 @@ const HorseAnalysisApp = () => {
   const [resultRanking, setResultRanking] = useState('');
   const [oddsInput, setOddsInput] = useState({});
   const [showOddsModal, setShowOddsModal] = useState(false);
+  const [oddsInputMode, setOddsInputMode] = useState('manual');
+  const [oddsPasteText, setOddsPasteText] = useState('');
   
   const [isAdmin, setIsAdmin] = useState(false);
   const [showAdminModal, setShowAdminModal] = useState(false);
@@ -1156,41 +1158,121 @@ const HorseAnalysisApp = () => {
     );
   };
 
-  // netkeibaのコピペからオッズを抽出する関数
-  const parseOddsFromNetkeiba = (text) => {
-    const lines = text.trim().split('\n');
-    const oddsMap = {};
+  // オッズ判定（オッズと人気順位の区別）
+  const isOddsValue = (value, parts, index) => {
+    if (!value) return false;
     
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i].trim();
-      const parts = line.split('\t');
-      
-      // 枠番と馬番がある行を探す（例: "1	1	"）
-      if (parts.length >= 2 && /^\d+$/.test(parts[0]) && /^\d+$/.test(parts[1])) {
-        const horseNum = parseInt(parts[1]);
-        
-        // この行の次の3行目（馬名の次の行）にオッズがある
-        // i+3の行を確認
-        if (i + 3 < lines.length) {
-          const oddsLine = lines[i + 3].trim();
-          
-          // その行から全ての数値を抽出
-          const numbers = oddsLine.match(/\d+\.\d+|\d+/g);
-          
-          if (numbers && numbers.length > 0) {
-            // 最後の数値がオッズ（例: 751.6, 3.0, 526.9）
-            const lastNumber = parseFloat(numbers[numbers.length - 1]);
-            
-            // オッズとして妥当な範囲
-            if (lastNumber >= 1.0 && lastNumber < 1000) {
-              oddsMap[horseNum] = lastNumber;
-            }
-          }
-        }
-      }
+    const num = parseFloat(value);
+    if (isNaN(num)) return false;
+    
+    // 人気順位は通常1～18の整数
+    if (Number.isInteger(num) && num > 0 && num <= 18) {
+      return false;
     }
     
-    return oddsMap;
+    // 小数点を含み、現実的な範囲ならオッズ
+    if (value.includes('.') && num >= 1.0 && num < 1000) {
+      return true;
+    }
+    
+    // 後ろから2列目にある1.0以上の数値はオッズの可能性が高い
+    if (index === parts.length - 2 && num >= 1.0 && num < 1000) {
+      return true;
+    }
+    
+    return false;
+  };
+
+  // オッズ貼り付けデータを解析して反映
+  const parseAndSetOdds = () => {
+    if (!oddsPasteText.trim()) {
+      window.alert('データが入力されていません');
+      return;
+    }
+
+    const lines = oddsPasteText.trim().split(/\r?\n/);
+    const parsedOdds = {};
+    let successCount = 0;
+    let errorCount = 0;
+    const availableHorseNumbers = new Set((currentRace?.horses || []).map((horse) => horse.horseNum));
+
+    lines.forEach((rawLine) => {
+      const line = rawLine.trim();
+      if (!line) return;
+
+      let parts = line.split('\t').map((part) => part.trim()).filter(Boolean);
+
+      // タブ区切りでうまく分割できなかった場合はスペース区切りで再試行
+      if (parts.length < 2) {
+        parts = line.split(/\s+/).map((part) => part.trim()).filter(Boolean);
+      }
+
+      if (parts.length < 2) return;
+
+      let horseNum = null;
+
+      // 2列目を馬番として優先的に使用
+      const secondColumn = parseInt(parts[1], 10);
+      if (!Number.isNaN(secondColumn) && secondColumn >= 1 && secondColumn <= 18) {
+        horseNum = secondColumn;
+      }
+
+      // 2列目が不適切な場合は1列目を使用
+      if (!horseNum) {
+        const firstColumn = parseInt(parts[0], 10);
+        if (!Number.isNaN(firstColumn) && firstColumn >= 1 && firstColumn <= 18) {
+          horseNum = firstColumn;
+        }
+      }
+
+      if (!horseNum) {
+        errorCount++;
+        console.warn('馬番の解析に失敗:', parts);
+        return;
+      }
+
+      if (availableHorseNumbers.size > 0 && !availableHorseNumbers.has(horseNum)) {
+        errorCount++;
+        console.warn(`解析対象外の馬番を検出: ${horseNum}`, parts);
+        return;
+      }
+
+      let odds = null;
+
+      for (let i = parts.length - 1; i >= 0; i--) {
+        if (isOddsValue(parts[i], parts, i)) {
+          odds = parseFloat(parts[i]);
+          break;
+        }
+      }
+
+      if (odds !== null && !Number.isNaN(odds)) {
+        parsedOdds[horseNum] = odds;
+        successCount++;
+      } else {
+        errorCount++;
+        console.warn(`オッズの解析に失敗: 馬番${horseNum}`, parts);
+      }
+    });
+
+    if (successCount === 0) {
+      window.alert('オッズを解析できませんでした。\nデータ形式を確認してください。');
+      return;
+    }
+
+    const message = `${successCount}頭分のオッズを読み込みました${errorCount > 0 ? `\n（${errorCount}頭は読み込めませんでした）` : ''}`;
+
+    setOddsInput(parsedOdds);
+    setOddsPasteText('');
+    setOddsInputMode('manual');
+
+    console.log('オッズ解析結果:', {
+      successCount,
+      errorCount,
+      parsedOdds
+    });
+
+    window.alert(message + '\n\n手入力モードで確認・修正できます。');
   };
 
   const calculateWinRate = (horses, courseKey = null) => {
@@ -5028,6 +5110,8 @@ const HorseAnalysisApp = () => {
                   <button
                     onClick={() => {
                       setOddsInput(currentRace.odds || {});
+                      setOddsPasteText('');
+                      setOddsInputMode('manual');
                       setShowOddsModal(true);
                     }}
                     className="flex-1 md:flex-none px-3 py-1.5 md:py-2 bg-gradient-to-r from-orange-400 to-orange-500 text-white rounded-full font-bold text-xs shadow-lg hover:shadow-2xl hover:scale-105 transition transform whitespace-nowrap flex items-center justify-center gap-1"
@@ -5654,88 +5738,111 @@ const HorseAnalysisApp = () => {
         {/* オッズ入力モーダル */}
         {showOddsModal && isAdmin && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-            <div className="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl max-h-[90vh] overflow-y-auto">
+            <div className="bg-white rounded-3xl p-6 max-w-2xl w-full shadow-2xl max-h-[90vh] overflow-y-auto">
               <h3 className="text-xl font-bold mb-6 text-gray-800 flex items-center gap-2">
                 <StarPixelArt size={24} />
                 オッズを入力
               </h3>
-              
-              {/* 🆕 一括貼り付けセクション */}
-              <div className="mb-6 p-4 bg-gradient-to-r from-blue-50 to-purple-50 rounded-2xl border-2 border-blue-300">
-                <label className="block text-sm font-bold text-gray-700 mb-2">
-                  📋 netkeibaから一括貼り付け
-                </label>
-                <textarea
-                  id="oddsTextarea"
-                  placeholder="netkeibaの出馬表をコピーしてここに貼り付けてください&#10;&#10;1. netkeibaで全選択（Ctrl+A / Cmd+A）&#10;2. コピー（Ctrl+C / Cmd+C）&#10;3. ここに貼り付け（Ctrl+V / Cmd+V）&#10;4. 下の「オッズを抽出」ボタンをクリック"
-                  className="w-full h-32 p-3 border-2 border-blue-300 rounded-xl text-sm focus:outline-none focus:border-blue-500 font-mono"
-                />
-                
+
+              {/* 入力モード切り替えタブ */}
+              <div className="flex gap-2 mb-6">
                 <button
-                  onClick={() => {
-                    const textarea = document.getElementById('oddsTextarea');
-                    const text = textarea.value;
-                    
-                    if (!text.trim()) {
-                      window.alert('❌ テキストが入力されていません');
-                      return;
-                    }
-                    
-                    const extractedOdds = parseOddsFromNetkeiba(text);
-                    
-                    if (Object.keys(extractedOdds).length > 0) {
-                      setOddsInput(extractedOdds);
-                      textarea.value = '';
-                      
-                      // 抽出したオッズを表示
-                      let message = `✅ ${Object.keys(extractedOdds).length}頭分のオッズを抽出しました！\n\n`;
-                      Object.entries(extractedOdds).forEach(([num, odds]) => {
-                        message += `${num}番: ${odds}倍\n`;
-                      });
-                      window.alert(message);
-                    } else {
-                      window.alert('❌ オッズを抽出できませんでした。\n\nnetkeibaの出馬表ページ全体をコピーして貼り付けてください。');
-                    }
-                  }}
-                  className="w-full mt-3 px-4 py-2 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-full font-bold shadow-lg hover:shadow-2xl transition"
+                  onClick={() => setOddsInputMode('manual')}
+                  className={`flex-1 px-4 py-2 rounded-full font-bold transition ${
+                    oddsInputMode === 'manual'
+                      ? 'bg-orange-400 text-white'
+                      : 'bg-gray-200 text-gray-800 hover:bg-gray-300'
+                  }`}
                 >
-                  🔍 オッズを抽出
+                  手入力
                 </button>
-                
-                <p className="text-xs text-gray-600 mt-2">
-                  💡 netkeibaの出馬表ページで全選択（Ctrl+A / Cmd+A）してコピーし、上の欄に貼り付けて「オッズを抽出」ボタンを押してください
-                </p>
+                <button
+                  onClick={() => setOddsInputMode('paste')}
+                  className={`flex-1 px-4 py-2 rounded-full font-bold transition ${
+                    oddsInputMode === 'paste'
+                      ? 'bg-orange-400 text-white'
+                      : 'bg-gray-200 text-gray-800 hover:bg-gray-300'
+                  }`}
+                >
+                  📋 貼り付け
+                </button>
               </div>
 
-              {/* 既存の手動入力セクション */}
-              <div className="mb-6">
-                <label className="block text-sm font-bold text-gray-700 mb-3">
-                  ✏️ 個別に編集
-                </label>
-                <div className="space-y-3 max-h-64 overflow-y-auto">
-                  {currentRace.horses.sort((a, b) => a.horseNum - b.horseNum).map((horse) => (
-                    <div key={horse.horseNum} className="flex items-center gap-3">
-                      <label className="text-xs font-bold text-gray-700 w-32 truncate">
-                        {horse.horseNum}. {horse.name}
-                      </label>
-                      <input
-                        type="number"
-                        step="0.1"
-                        value={oddsInput[horse.horseNum] || ''}
-                        onChange={(e) => setOddsInput({...oddsInput, [horse.horseNum]: parseFloat(e.target.value) || 0})}
-                        className="flex-1 px-3 py-2 border-2 border-orange-300 rounded-lg text-xs focus:outline-none focus:border-orange-500"
-                        placeholder="オッズ"
-                      />
-                    </div>
-                  ))}
+              {oddsInputMode === 'paste' ? (
+                <div className="mb-6">
+                  <label className="block text-sm font-bold text-gray-700 mb-2">
+                    オッズデータを貼り付け
+                  </label>
+                  <textarea
+                    value={oddsPasteText}
+                    onChange={(e) => setOddsPasteText(e.target.value)}
+                    className="w-full h-64 p-4 border-2 border-orange-300 rounded-2xl font-mono text-xs focus:outline-none focus:border-orange-500"
+                    placeholder="netkeiba.comなどからコピーしたデータを貼り付けてください"
+                  />
+
+                  <div className="mt-4 p-3 bg-blue-50 rounded-2xl border-2 border-blue-200">
+                    <p className="text-xs text-blue-800 font-bold mb-2">
+                      💡 対応形式：
+                    </p>
+                    <ul className="text-xs text-blue-700 space-y-1 list-disc pl-5">
+                      <li>中央競馬：netkeiba形式（後ろから2列目がオッズ）</li>
+                      <li>地方競馬：オッズのみの列</li>
+                    </ul>
+                  </div>
+
+                  <button
+                    onClick={parseAndSetOdds}
+                    className="w-full mt-4 px-6 py-3 bg-gradient-to-r from-orange-400 to-orange-500 text-white rounded-full font-bold shadow-lg hover:shadow-2xl transition"
+                  >
+                    オッズを反映
+                  </button>
+
+                  <div className="mt-4 p-3 bg-gray-50 rounded-2xl border border-gray-200">
+                    <details>
+                      <summary className="text-xs font-bold text-gray-700 cursor-pointer">
+                        デバッグ情報を表示
+                      </summary>
+                      <pre className="text-xs text-gray-600 mt-2 overflow-x-auto whitespace-pre-wrap">
+                        {JSON.stringify(oddsInput, null, 2)}
+                      </pre>
+                    </details>
+                  </div>
                 </div>
-              </div>
+              ) : (
+                <div className="space-y-3 mb-6 max-h-72 overflow-y-auto pr-1">
+                  {(currentRace?.horses || [])
+                    .slice()
+                    .sort((a, b) => a.horseNum - b.horseNum)
+                    .map((horse) => (
+                      <div key={horse.horseNum} className="flex items-center gap-3">
+                        <label className="text-xs font-bold text-gray-700 w-32 truncate">
+                          {horse.horseNum}. {horse.name}
+                        </label>
+                        <input
+                          type="number"
+                          step="0.1"
+                          value={oddsInput[horse.horseNum] ?? ''}
+                          onChange={(e) =>
+                            setOddsInput({
+                              ...oddsInput,
+                              [horse.horseNum]: parseFloat(e.target.value) || 0
+                            })
+                          }
+                          className="flex-1 px-3 py-2 border-2 border-orange-300 rounded-lg text-xs focus:outline-none focus:border-orange-500"
+                          placeholder="オッズ"
+                        />
+                      </div>
+                    ))}
+                </div>
+              )}
 
               <div className="flex gap-4">
                 <button
                   onClick={() => {
                     updateRaceOdds(oddsInput);
                     setShowOddsModal(false);
+                    setOddsInputMode('manual');
+                    setOddsPasteText('');
                   }}
                   className="flex-1 px-4 py-3 bg-gradient-to-r from-orange-400 to-orange-500 text-white rounded-full font-bold shadow-lg hover:shadow-2xl transition"
                 >
@@ -5744,7 +5851,8 @@ const HorseAnalysisApp = () => {
                 <button
                   onClick={() => {
                     setShowOddsModal(false);
-                    document.getElementById('oddsTextarea').value = '';
+                    setOddsInputMode('manual');
+                    setOddsPasteText('');
                   }}
                   className="flex-1 px-4 py-3 bg-gray-400 text-white rounded-full font-bold hover:bg-gray-500 transition"
                 >
