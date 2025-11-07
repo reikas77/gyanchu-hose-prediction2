@@ -1158,6 +1158,26 @@ const HorseAnalysisApp = () => {
     );
   };
 
+  const oddsExcludeKeywords = [
+    '馬メモ',
+    'レース別馬メモ',
+    '全角',
+    '文字以内',
+    '削除',
+    '保存',
+    '閉じる',
+    '次走買い',
+    '次走消し',
+    '不利',
+    '馬場向かず',
+    'ペース合わず',
+    'ハイレベル戦',
+    '好ラップ',
+    '編集',
+    '/100',
+    '/500'
+  ];
+
   // オッズ判定（オッズと人気順位の区別）
   const isOddsValue = (value, parts, index) => {
     if (!value) return false;
@@ -1190,89 +1210,192 @@ const HorseAnalysisApp = () => {
       return;
     }
 
-    const lines = oddsPasteText.trim().split(/\r?\n/);
-    const parsedOdds = {};
-    let successCount = 0;
-    let errorCount = 0;
-    const availableHorseNumbers = new Set((currentRace?.horses || []).map((horse) => horse.horseNum));
+    console.log('=== オッズ解析開始 ===');
 
-    lines.forEach((rawLine) => {
-      const line = rawLine.trim();
-      if (!line) return;
+    const rawLines = oddsPasteText.trim().split(/\r?\n/);
+    console.log('元の行数:', rawLines.length);
 
-      let parts = line.split('\t').map((part) => part.trim()).filter(Boolean);
+    const cleanedLines = rawLines.filter((line) => {
+      const trimmed = line.trim();
 
-      // タブ区切りでうまく分割できなかった場合はスペース区切りで再試行
-      if (parts.length < 2) {
-        parts = line.split(/\s+/).map((part) => part.trim()).filter(Boolean);
+      if (!trimmed) return false;
+
+      if (trimmed === '--' || trimmed === '---') return false;
+
+      if (oddsExcludeKeywords.some((keyword) => trimmed.includes(keyword))) {
+        console.log('除外:', trimmed);
+        return false;
       }
 
-      if (parts.length < 2) return;
+      const hasNumberEarly = /^.{0,5}\d/.test(trimmed);
+      const hasTabOrMultipleSpaces = /[\t]|\s{2,}/.test(trimmed);
 
-      let horseNum = null;
-
-      // 2列目を馬番として優先的に使用
-      const secondColumn = parseInt(parts[1], 10);
-      if (!Number.isNaN(secondColumn) && secondColumn >= 1 && secondColumn <= 18) {
-        horseNum = secondColumn;
+      if (!hasNumberEarly && !hasTabOrMultipleSpaces) {
+        console.log('除外（数字なし）:', trimmed);
+        return false;
       }
 
-      // 2列目が不適切な場合は1列目を使用
-      if (!horseNum) {
-        const firstColumn = parseInt(parts[0], 10);
-        if (!Number.isNaN(firstColumn) && firstColumn >= 1 && firstColumn <= 18) {
-          horseNum = firstColumn;
-        }
-      }
-
-      if (!horseNum) {
-        errorCount++;
-        console.warn('馬番の解析に失敗:', parts);
-        return;
-      }
-
-      if (availableHorseNumbers.size > 0 && !availableHorseNumbers.has(horseNum)) {
-        errorCount++;
-        console.warn(`解析対象外の馬番を検出: ${horseNum}`, parts);
-        return;
-      }
-
-      let odds = null;
-
-      for (let i = parts.length - 1; i >= 0; i--) {
-        if (isOddsValue(parts[i], parts, i)) {
-          odds = parseFloat(parts[i]);
-          break;
-        }
-      }
-
-      if (odds !== null && !Number.isNaN(odds)) {
-        parsedOdds[horseNum] = odds;
-        successCount++;
-      } else {
-        errorCount++;
-        console.warn(`オッズの解析に失敗: 馬番${horseNum}`, parts);
-      }
+      return true;
     });
 
-    if (successCount === 0) {
-      window.alert('オッズを解析できませんでした。\nデータ形式を確認してください。');
+    console.log('クリーニング後の行数:', cleanedLines.length);
+    console.log('クリーニング後のデータ:', cleanedLines.slice(0, 10));
+
+    if (cleanedLines.length === 0) {
+      window.alert(
+        'データの解析に失敗しました。\n\n' +
+          '【原因】\n' +
+          '・馬番やオッズを含む行が見つかりませんでした\n\n' +
+          '【対処法】\n' +
+          '・出馬表の表部分のみをコピーしてください\n' +
+          '・または手入力モードをご利用ください'
+      );
       return;
     }
 
-    const message = `${successCount}頭分のオッズを読み込みました${errorCount > 0 ? `\n（${errorCount}頭は読み込めませんでした）` : ''}`;
+    const lines = cleanedLines;
+    const parsedOdds = {};
+    let successCount = 0;
+
+    const horseBlocks = [];
+    let currentBlock = { horseNum: null, lines: [] };
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i].trim();
+      const parts = line.split(/[\t\s]+/).filter((p) => p.trim());
+
+      if (parts.length >= 2) {
+        const nums = parts.slice(0, 3).map((p) => parseInt(p, 10)).filter((n) => !isNaN(n));
+        const horseNumCandidate = nums.find((n) => n >= 1 && n <= 18);
+
+        if (horseNumCandidate) {
+          if (currentBlock.horseNum !== null) {
+            horseBlocks.push({ ...currentBlock });
+          }
+          currentBlock = {
+            horseNum: horseNumCandidate,
+            lines: [line]
+          };
+          console.log(`馬番 ${horseNumCandidate} のブロック開始`);
+          continue;
+        }
+      }
+
+      if (currentBlock.horseNum !== null) {
+        currentBlock.lines.push(line);
+      }
+    }
+
+    if (currentBlock.horseNum !== null) {
+      horseBlocks.push(currentBlock);
+    }
+
+    console.log(`${horseBlocks.length}頭分のブロックを検出`);
+
+    const availableHorseNumbers = new Set((currentRace?.horses || []).map((horse) => horse.horseNum));
+
+    horseBlocks.forEach((block) => {
+      console.log(`\n馬番${block.horseNum}のデータ:`);
+
+      const allText = block.lines.join(' ');
+      const allParts = allText.split(/[\t\s]+/).filter((p) => p.trim());
+
+      console.log('  全要素:', allParts);
+
+      if (availableHorseNumbers.size > 0 && !availableHorseNumbers.has(block.horseNum)) {
+        console.warn(`  ❌ レースに存在しない馬番のためスキップ: ${block.horseNum}`);
+        return;
+      }
+
+      const numbers = [];
+      allParts.forEach((part, idx) => {
+        const value = parseFloat(part);
+        if (!Number.isNaN(value) && value > 0) {
+          numbers.push({
+            value,
+            str: part,
+            hasDecimal: part.includes('.'),
+            isSmallInt: value <= 18 && value % 1 === 0
+          });
+        }
+      });
+
+      console.log('  数値:', numbers.map((n) => `${n.value}(${n.hasDecimal ? '小数' : '整数'})`));
+
+      let odds = null;
+      const decimals = numbers.filter((n) => n.hasDecimal && n.value >= 1.0 && n.value < 999);
+
+      if (decimals.length >= 2) {
+        odds = decimals[decimals.length - 2].value;
+        console.log(`  → オッズ（後ろから2番目の小数）: ${odds}倍`);
+      } else if (decimals.length === 1) {
+        odds = decimals[0].value;
+        console.log(`  → オッズ（唯一の小数）: ${odds}倍`);
+      } else {
+        for (let i = allParts.length - 1; i >= 0; i--) {
+          if (isOddsValue(allParts[i], allParts, i)) {
+            odds = parseFloat(allParts[i]);
+            console.log(`  → オッズ（フォールバック判定）: ${odds}倍`);
+            break;
+          }
+        }
+      }
+
+      if (odds) {
+        parsedOdds[block.horseNum] = odds;
+        successCount++;
+        console.log(`  ✅ 確定: 馬番${block.horseNum} = ${odds}倍`);
+      } else {
+        console.warn('  ❌ オッズ未検出');
+      }
+    });
+
+    console.log('\n=== 最終結果 ===');
+    console.log(parsedOdds);
+    console.log(`成功: ${successCount}/${horseBlocks.length}頭`);
+
+    if (successCount === 0) {
+      window.alert(
+        'オッズを解析できませんでした。\n\n' +
+          '手入力モードをご利用ください。\n' +
+          '（F12キーでコンソールを開くと詳細なログが見られます）'
+      );
+      return;
+    }
+
+    const raceHorses = (currentRace?.horses || []).map((h) => ({
+      num: h.horseNum,
+      name: h.name
+    }));
+
+    const foundHorses = raceHorses.filter((h) => parsedOdds[h.num]);
+    const missingHorses = raceHorses.filter((h) => !parsedOdds[h.num]);
+
+    let message = `✅ ${successCount}頭のオッズを読み込みました\n\n`;
+
+    if (foundHorses.length > 0) {
+      message += '【読み込み成功】\n';
+      foundHorses.slice(0, 5).forEach((h) => {
+        message += `${h.num}番 ${h.name}: ${parsedOdds[h.num]}倍\n`;
+      });
+      if (foundHorses.length > 5) {
+        message += `...他${foundHorses.length - 5}頭\n`;
+      }
+    }
+
+    if (missingHorses.length > 0) {
+      message += `\n⚠️ 【未検出】${missingHorses.length}頭\n`;
+      missingHorses.forEach((h) => {
+        message += `${h.num}番 ${h.name}\n`;
+      });
+      message += '\n手入力モードで追加できます。';
+    }
 
     setOddsInput(parsedOdds);
     setOddsPasteText('');
     setOddsInputMode('manual');
 
-    console.log('オッズ解析結果:', {
-      successCount,
-      errorCount,
-      parsedOdds
-    });
-
-    window.alert(message + '\n\n手入力モードで確認・修正できます。');
+    window.alert(message);
   };
 
   const calculateWinRate = (horses, courseKey = null) => {
@@ -5770,6 +5893,17 @@ const HorseAnalysisApp = () => {
 
               {oddsInputMode === 'paste' ? (
                 <div className="mb-6">
+                  <div className="p-3 bg-green-50 rounded-2xl border-2 border-green-200 mb-4">
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="text-lg">✨</span>
+                      <span className="text-sm font-bold text-green-800">自動クリーニング機能</span>
+                    </div>
+                    <p className="text-xs text-green-700">
+                      貼り付けたデータから、馬メモや編集ボタンなどの不要なテキストを自動的に除外します。
+                      出馬表をそのままコピーして貼り付けてOKです！
+                    </p>
+                  </div>
+
                   <label className="block text-sm font-bold text-gray-700 mb-2">
                     オッズデータを貼り付け
                   </label>
@@ -5796,6 +5930,55 @@ const HorseAnalysisApp = () => {
                   >
                     オッズを反映
                   </button>
+
+                  {oddsPasteText && (
+                    <div className="mt-4 space-y-2">
+                      <button
+                        onClick={() => {
+                          const rawLines = oddsPasteText.trim().split(/\r?\n/);
+
+                          const cleaned = rawLines.filter((line) => {
+                            const trimmed = line.trim();
+                            if (!trimmed || trimmed === '--' || trimmed === '---') return false;
+                            if (oddsExcludeKeywords.some((k) => trimmed.includes(k))) return false;
+                            return true;
+                          });
+
+                          if (console.clear) {
+                            console.clear();
+                          }
+                          console.log('=== データクリーニング ===');
+                          console.log('元の行数:', rawLines.length);
+                          console.log('クリーニング後:', cleaned.length);
+                          console.log('\nクリーニング後のデータ:');
+                          cleaned.forEach((line, i) => {
+                            console.log(`${i + 1}: ${line}`);
+                          });
+
+                          window.alert(
+                            `データをクリーニングしました\n\n` +
+                              `元の行数: ${rawLines.length}行\n` +
+                              `処理後: ${cleaned.length}行\n\n` +
+                              `詳細はコンソール（F12）で確認できます`
+                          );
+                        }}
+                        className="w-full px-4 py-2 bg-purple-100 text-purple-800 rounded-full font-bold text-sm hover:bg-purple-200 transition"
+                      >
+                        🧹 データをクリーニング（プレビュー）
+                      </button>
+
+                      <details className="text-xs">
+                        <summary className="cursor-pointer font-bold text-gray-700 hover:text-gray-900">
+                          除外される文字列を確認
+                        </summary>
+                        <div className="mt-2 p-2 bg-gray-50 rounded text-gray-600">
+                          馬メモ、レース別馬メモ、全角、文字以内、削除、保存、閉じる、
+                          次走買い、次走消し、不利、馬場向かず、ペース合わず、
+                          ハイレベル戦、好ラップ、編集、/100、/500 など
+                        </div>
+                      </details>
+                    </div>
+                  )}
 
                   <div className="mt-4 p-3 bg-gray-50 rounded-2xl border border-gray-200">
                     <details>
@@ -6523,5 +6706,6 @@ const HorseAnalysisApp = () => {
 };
 
 export default HorseAnalysisApp;
+
 
 
