@@ -1240,8 +1240,17 @@ const HorseAnalysisApp = () => {
       console.log(`\n行${i + 1}:`, line);
       console.log('  分割:', parts);
 
-      const nums = parts.slice(0, 3).map((p) => parseInt(p, 10)).filter((n) => !isNaN(n));
-      const horseNumCandidate = nums.find((n) => n >= 1 && n <= 18);
+      const numEntries = parts
+        .slice(0, 4)
+        .map((p, idx) => ({ value: parseInt(p, 10), idx }))
+        .filter(({ value }) => !Number.isNaN(value) && value >= 1 && value <= 18);
+
+      let horseNumCandidate = null;
+      if (numEntries.length >= 2) {
+        horseNumCandidate = numEntries[1].value;
+      } else if (numEntries.length === 1) {
+        horseNumCandidate = numEntries[0].value;
+      }
 
       if (horseNumCandidate) {
         currentHorseNum = horseNumCandidate;
@@ -6610,6 +6619,7 @@ const HorseAnalysisApp = () => {
 };
 
 export default HorseAnalysisApp;
+
 
 
 
