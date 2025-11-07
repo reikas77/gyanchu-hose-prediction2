@@ -1212,155 +1212,69 @@ const HorseAnalysisApp = () => {
 
     console.log('=== オッズ解析開始 ===');
 
+    console.clear();
+    console.log('=== オッズ解析開始 ===');
+
     const rawLines = oddsPasteText.trim().split(/\r?\n/);
-    console.log('元の行数:', rawLines.length);
-
-    const cleanedLines = rawLines.filter((line) => {
+    const lines = rawLines.filter((line) => {
       const trimmed = line.trim();
-
-      if (!trimmed) return false;
-
-      if (trimmed === '--' || trimmed === '---') return false;
-
-      if (oddsExcludeKeywords.some((keyword) => trimmed.includes(keyword))) {
-        console.log('除外:', trimmed);
-        return false;
-      }
-
-      const hasNumberEarly = /^.{0,5}\d/.test(trimmed);
-      const hasTabOrMultipleSpaces = /[\t]|\s{2,}/.test(trimmed);
-
-      if (!hasNumberEarly && !hasTabOrMultipleSpaces) {
-        console.log('除外（数字なし）:', trimmed);
-        return false;
-      }
-
+      if (!trimmed || trimmed === '--' || trimmed === '---') return false;
+      if (oddsExcludeKeywords.some((keyword) => trimmed.includes(keyword))) return false;
       return true;
     });
 
-    console.log('クリーニング後の行数:', cleanedLines.length);
-    console.log('クリーニング後のデータ:', cleanedLines.slice(0, 10));
+    console.log('有効な行数:', lines.length);
 
-    if (cleanedLines.length === 0) {
-      window.alert(
-        'データの解析に失敗しました。\n\n' +
-          '【原因】\n' +
-          '・馬番やオッズを含む行が見つかりませんでした\n\n' +
-          '【対処法】\n' +
-          '・出馬表の表部分のみをコピーしてください\n' +
-          '・または手入力モードをご利用ください'
-      );
+    if (lines.length === 0) {
+      window.alert('データの解析に失敗しました。手入力モードをご利用ください。');
       return;
     }
 
-    const lines = cleanedLines;
     const parsedOdds = {};
-    let successCount = 0;
-
-    const horseBlocks = [];
-    let currentBlock = { horseNum: null, lines: [] };
+    let currentHorseNum = null;
 
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i].trim();
-      const parts = line.split(/[\t\s]+/).filter((p) => p.trim());
+      const parts = line.split(/[\t\s]+/).filter((p) => p && p.trim());
 
-      if (parts.length >= 2) {
-        const nums = parts.slice(0, 3).map((p) => parseInt(p, 10)).filter((n) => !isNaN(n));
-        const horseNumCandidate = nums.find((n) => n >= 1 && n <= 18);
+      console.log(`\n行${i + 1}:`, line);
+      console.log('  分割:', parts);
 
-        if (horseNumCandidate) {
-          if (currentBlock.horseNum !== null) {
-            horseBlocks.push({ ...currentBlock });
-          }
-          currentBlock = {
-            horseNum: horseNumCandidate,
-            lines: [line]
-          };
-          console.log(`馬番 ${horseNumCandidate} のブロック開始`);
-          continue;
-        }
+      const nums = parts.slice(0, 3).map((p) => parseInt(p, 10)).filter((n) => !isNaN(n));
+      const horseNumCandidate = nums.find((n) => n >= 1 && n <= 18);
+
+      if (horseNumCandidate) {
+        currentHorseNum = horseNumCandidate;
+        console.log(`  → 馬番検出: ${currentHorseNum}`);
+        continue;
       }
 
-      if (currentBlock.horseNum !== null) {
-        currentBlock.lines.push(line);
+      if (currentHorseNum && !parsedOdds[currentHorseNum]) {
+        const decimals = parts
+          .map((p) => parseFloat(p))
+          .filter(
+            (n) =>
+              !Number.isNaN(n) && n >= 1.0 && n < 999 && !(n >= 50.0 && n <= 60.0)
+          );
+
+        console.log('  小数候補:', decimals);
+
+        if (decimals.length > 0) {
+          const odds = decimals[0];
+          parsedOdds[currentHorseNum] = odds;
+          console.log(`  ✅ 馬番${currentHorseNum}: ${odds}倍`);
+          currentHorseNum = null;
+        }
       }
     }
 
-    if (currentBlock.horseNum !== null) {
-      horseBlocks.push(currentBlock);
-    }
-
-    console.log(`${horseBlocks.length}頭分のブロックを検出`);
-
-    const availableHorseNumbers = new Set((currentRace?.horses || []).map((horse) => horse.horseNum));
-
-    horseBlocks.forEach((block) => {
-      console.log(`\n馬番${block.horseNum}のデータ:`);
-
-      const allText = block.lines.join(' ');
-      const allParts = allText.split(/[\t\s]+/).filter((p) => p.trim());
-
-      console.log('  全要素:', allParts);
-
-      if (availableHorseNumbers.size > 0 && !availableHorseNumbers.has(block.horseNum)) {
-        console.warn(`  ❌ レースに存在しない馬番のためスキップ: ${block.horseNum}`);
-        return;
-      }
-
-      const numbers = [];
-      allParts.forEach((part, idx) => {
-        const value = parseFloat(part);
-        if (!Number.isNaN(value) && value > 0) {
-          numbers.push({
-            value,
-            str: part,
-            index: idx,
-            hasDecimal: part.includes('.'),
-            isSmallInt: value <= 18 && value % 1 === 0,
-            isKinryo: part.includes('.') && value >= 50.0 && value <= 60.0
-          });
-        }
-      });
-
-      console.log(
-        '  数値:',
-        numbers.map(
-          (n) =>
-            `${n.value}(${n.hasDecimal ? '小数' : '整数'}${n.isKinryo ? '/斤量?' : ''})`
-        )
-      );
-
-      const firstDecimal = numbers.find(
-        (n) => n.hasDecimal && n.value >= 1.0 && n.value < 999 && !n.isKinryo
-      );
-
-      let odds = null;
-      if (firstDecimal) {
-        odds = firstDecimal.value;
-        console.log(`  → オッズ（最初の小数）: ${odds}倍`);
-      } else {
-        console.warn('  ❌ 小数が見つかりませんでした');
-      }
-
-      if (odds) {
-        parsedOdds[block.horseNum] = odds;
-        successCount++;
-        console.log(`  ✅ 確定: 馬番${block.horseNum} = ${odds}倍`);
-      } else {
-        console.warn('  ❌ オッズ未検出');
-      }
-    });
-
-    console.log('\n=== 最終結果 ===');
+    console.log('\n=== 結果 ===');
     console.log(parsedOdds);
-    console.log(`成功: ${successCount}/${horseBlocks.length}頭`);
+
+    const successCount = Object.keys(parsedOdds).length;
 
     if (successCount === 0) {
-      window.alert(
-        'オッズを解析できませんでした。\n\n' +
-          '手入力モードをご利用ください。\n' +
-          '（F12キーでコンソールを開くと詳細なログが見られます）'
-      );
+      window.alert('オッズを解析できませんでした。\nF12でコンソールを確認してください。');
       return;
     }
 
@@ -1374,28 +1288,23 @@ const HorseAnalysisApp = () => {
 
     let message = `✅ ${successCount}頭のオッズを読み込みました\n\n`;
 
-    if (foundHorses.length > 0) {
-      message += '【読み込み成功】\n';
-      foundHorses.slice(0, 5).forEach((h) => {
-        message += `${h.num}番 ${h.name}: ${parsedOdds[h.num]}倍\n`;
-      });
-      if (foundHorses.length > 5) {
-        message += `...他${foundHorses.length - 5}頭\n`;
-      }
+    foundHorses.slice(0, 5).forEach((h) => {
+      message += `${h.num}番 ${h.name}: ${parsedOdds[h.num]}倍\n`;
+    });
+    if (foundHorses.length > 5) {
+      message += `...他${foundHorses.length - 5}頭\n`;
     }
 
     if (missingHorses.length > 0) {
-      message += `\n⚠️ 【未検出】${missingHorses.length}頭\n`;
+      message += `\n⚠️ 未検出: ${missingHorses.length}頭\n`;
       missingHorses.forEach((h) => {
         message += `${h.num}番 ${h.name}\n`;
       });
-      message += '\n手入力モードで追加できます。';
     }
 
     setOddsInput(parsedOdds);
     setOddsPasteText('');
     setOddsInputMode('manual');
-
     window.alert(message);
   };
 
