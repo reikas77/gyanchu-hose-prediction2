@@ -1250,20 +1250,14 @@ const HorseAnalysisApp = () => {
       }
 
       if (currentHorseNum && !parsedOdds[currentHorseNum]) {
-        const decimals = parts
-          .map((p) => parseFloat(p))
-          .filter(
-            (n) =>
-              !Number.isNaN(n) && n >= 1.0 && n < 999 && !(n >= 50.0 && n <= 60.0)
-          );
-
-        console.log('  小数候補:', decimals);
-
-        if (decimals.length > 0) {
-          const odds = decimals[0];
+        const decimalMatches = line.match(/\d+\.\d+/g);
+        if (decimalMatches && decimalMatches.length > 0) {
+          console.log('  小数候補:', decimalMatches);
+          const odds = parseFloat(decimalMatches[decimalMatches.length - 1]);
           parsedOdds[currentHorseNum] = odds;
           console.log(`  ✅ 馬番${currentHorseNum}: ${odds}倍`);
           currentHorseNum = null;
+          continue;
         }
       }
     }
