@@ -1571,26 +1571,41 @@ const HorseAnalysisApp = () => {
       }
       return first * second * third;
     } else if (betType === '3連複フォーメーション') {
-      // 3連複フォーメーション: 軸1 × 軸2 × 相手（重複除外）
-      if (horses.length >= 3) {
-        const axis1Str = horses[0].split(':')[1]?.trim() || '';
-        const axis2Str = horses[1].split(':')[1]?.trim() || '';
-        const opponentStr = horses[2].split(':')[1]?.trim() || '';
-        
-        const axis1 = axis1Str.split(',').filter(s => s.trim()).length;
-        const axis2 = axis2Str.split(',').filter(s => s.trim()).length;
-        const opponent = opponentStr.split(',').filter(s => s.trim()).length;
-        
-        // 軸1と軸2が同じ場合の処理
-        if (axis1Str === axis2Str) {
-          // 同じ軸を2つ使う場合: nC2 × 相手
-          return (axis1 * (axis1 - 1) / 2) * opponent;
-        } else {
-          // 異なる軸の場合: 軸1 × 軸2 × 相手
-          return axis1 * axis2 * opponent;
-        }
+      const parseGroup = (entry) => {
+        if (!entry) return [];
+        const [, list = ''] = entry.split(':');
+        return list
+          .split(',')
+          .map((s) => {
+            const num = parseInt(s.trim(), 10);
+            return Number.isNaN(num) ? null : num;
+          })
+          .filter((num) => num !== null);
+      };
+
+      const groupA = parseGroup(horses[0]);
+      const groupB = parseGroup(horses[1]);
+      const groupC = parseGroup(horses[2]);
+
+      if (groupA.length === 0 || groupB.length === 0 || groupC.length === 0) {
+        return 0;
       }
-      return 0;
+
+      const combos = new Set();
+
+      groupA.forEach((a) => {
+        groupB.forEach((b) => {
+          groupC.forEach((c) => {
+            if (a === b || a === c || b === c) {
+              return;
+            }
+            const sorted = [a, b, c].sort((x, y) => x - y).join('-');
+            combos.add(sorted);
+          });
+        });
+      });
+
+      return combos.size;
     } else if (betType === '3連複2頭軸') {
       // 3連複2頭軸: 軸2頭 × 相手
       const axis = horses[0].split(':')[1]?.split(',').length || 0;
@@ -1639,15 +1654,18 @@ const HorseAnalysisApp = () => {
       const winRate7Plus = resultsWithRate.filter(h => h.winRate >= 7);
       
       // A案: 3連複フォーメーション
-      const axisHorses = top3.map(h => h.horseNum).join(',');
-      const opponentHorses = winRate7Plus.map(h => h.horseNum).join(',');
-      // 軸と相手が同じ場合: 3C2 × ヒモ
-      const axisCount = 3;
-      const himoCount = winRate7Plus.length;
-      const pointsA = (axisCount * (axisCount - 1) / 2) * himoCount;
+      const axisNums = top3.map(h => h.horseNum);
+      const opponentNums = winRate7Plus.map(h => h.horseNum);
+      const himoNums = opponentNums.length > 0 ? opponentNums : axisNums;
+      const formationA = [
+        `軸: ${axisNums.join(',')}`,
+        `相手: ${axisNums.join(',')}`,
+        `ヒモ: ${himoNums.join(',')}`
+      ];
+      const pointsA = calculateBetPoints('3連複フォーメーション', formationA);
       planA = {
         type: '3連複フォーメーション',
-        horses: [`軸: ${axisHorses}`, `相手: ${axisHorses}`, `ヒモ: ${opponentHorses}`],
+        horses: formationA,
         amount: pointsA * 100,
         points: pointsA,
         reason: '勝率3位の下に断層、3連複フォーメーション',
@@ -2001,21 +2019,26 @@ const HorseAnalysisApp = () => {
       }
       
       // 相手馬から軸馬を除外
-      const opponent = winRate10Plus
+      const opponentNums = winRate10Plus
         .filter(h => h.horseNum !== axis1 && h.horseNum !== axis2)
-        .map(h => h.horseNum)
-        .join(',');
+        .map(h => h.horseNum);
       
-      const opponentCount = winRate10Plus.filter(h => h.horseNum !== axis1 && h.horseNum !== axis2).length;
-      const pointsB = (axis1 === axis2 ? 0 : 1 * opponentCount);
-      planB = {
+      const axisGroup1 = Number.isFinite(axis1) ? [axis1] : [];
+      const axisGroup2 = Number.isFinite(axis2) ? [axis2] : [];
+      const formationB = [
+        `軸1: ${axisGroup1.join(',')}`,
+        `軸2: ${axisGroup2.join(',')}`,
+        `相手: ${opponentNums.join(',')}`
+      ];
+      const pointsB = calculateBetPoints('3連複フォーメーション', formationB);
+      planB = pointsB > 0 ? {
         type: '3連複フォーメーション',
-        horses: [`軸1: ${axis1}`, `軸2: ${axis2}`, `相手: ${opponent}`],
+        horses: formationB,
         amount: pointsB * 100,
         points: pointsB,
         reason: '期待値馬を軸に、勝率10%以上',
         warning: null
-      };
+      } : null;
       
       // C案: 単勝
       const bestExp = expWinRate10Plus.length > 0 
@@ -2108,16 +2131,26 @@ const HorseAnalysisApp = () => {
         .map(h => h.horseNum)
         .join(',');
       
-      const opponentCount = resultsWithRate.filter(h => h.winRate >= 5 && h.horseNum !== axis1 && h.horseNum !== axis2).length;
-      const pointsB = (axis1 === axis2 ? 0 : 1 * opponentCount);
-      planB = {
+      const axisGroup1B = Number.isFinite(axis1) ? [axis1] : [];
+      const axisGroup2B = Number.isFinite(axis2) ? [axis2] : [];
+      const opponentNums = resultsWithRate
+        .filter(h => h.winRate >= 5 && h.horseNum !== axis1 && h.horseNum !== axis2)
+        .map(h => h.horseNum);
+      
+      const formationB = [
+        `軸1: ${axisGroup1B.join(',')}`,
+        `軸2: ${axisGroup2B.join(',')}`,
+        `相手: ${opponentNums.join(',')}`
+      ];
+      const pointsB = calculateBetPoints('3連複フォーメーション', formationB);
+      planB = pointsB > 0 ? {
         type: '3連複フォーメーション',
-        horses: [`軸: ${axis1}`, `相手1: ${axis2}`, `相手2: ${opponent}`],
+        horses: formationB,
         amount: pointsB * 100,
         points: pointsB,
         reason: '勝率1位を軸、期待値馬または5%以上',
         warning: null
-      };
+      } : null;
       
       // C案: 単勝
       planC = {
@@ -5204,15 +5237,19 @@ const HorseAnalysisApp = () => {
               // 全ファクターの偏差値をチェックして、基準未達のファクターを特定
               const failedFactors = [];
               Object.keys(cutoffDeviations).forEach(factorKey => {
-                const cutoff = cutoffDeviations[factorKey];
+                const cutoffRaw = cutoffDeviations[factorKey];
                 // 足切り設定がnull/undefinedの場合は判定から除外
-                if (cutoff !== null && cutoff !== undefined && !isNaN(cutoff)) {
-                  const deviation = allFactorDeviations[factorKey]?.[horse.horseNum];
+                if (cutoffRaw !== null && cutoffRaw !== undefined && !isNaN(cutoffRaw)) {
+                  const cutoff = parseFloat(cutoffRaw);
+                  const deviationRaw = allFactorDeviations[factorKey]?.[horse.horseNum];
+                  const deviation = deviationRaw !== null && deviationRaw !== undefined
+                    ? parseFloat(deviationRaw)
+                    : null;
                   // 偏差値が数値として存在する場合のみ判定
                   // 偏差値がnull/undefinedの場合は、そのファクターの判定から除外（データがないため）
-                  if (deviation !== null && deviation !== undefined && !isNaN(deviation)) {
+                  if (deviation !== null && !Number.isNaN(deviation)) {
                     // 偏差値が基準値未満の場合のみ基準未達
-                    if (deviation < cutoff) {
+                    if (deviation + 1e-6 < cutoff) {
                       failedFactors.push(factorKey);
                     }
                   }
