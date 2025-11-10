@@ -1790,6 +1790,7 @@ const HorseAnalysisApp = () => {
       
       // A案: 3連複フォーメーション
       const axisNums = top3.map(h => h.horseNum);
+      const axisHorses = axisNums.join(',');
       const opponentNums = winRate7Plus.map(h => h.horseNum);
       const himoNums = opponentNums.length > 0 ? opponentNums : axisNums;
       const formationA = [
