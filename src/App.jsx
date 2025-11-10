@@ -142,6 +142,114 @@ const EyePixelArt = ({ size = 24 }) => (
   </svg>
 );
 
+const Sidebar = ({
+  activeTab,
+  onSelect,
+  isAdmin,
+  onClose,
+  isMobile = false,
+}) => {
+  const navItems = [
+    {
+      key: 'races',
+      label: 'レース予想（未出走/過去）',
+      icon: <HorsePixelArt size={20} />,
+      isActive: activeTab === 'races-upcoming' || activeTab === 'races-past',
+      onClick: () => onSelect('races-upcoming'),
+      disabled: false,
+    },
+    {
+      key: 'settings',
+      label: 'コース設定',
+      icon: <CrownPixelArt size={20} />,
+      isActive: activeTab === 'settings',
+      onClick: () => onSelect('settings'),
+      disabled: !isAdmin,
+    },
+    {
+      key: 'stats',
+      label: '成績分析',
+      icon: <BarPixelArt size={20} />,
+      isActive: activeTab === 'stats',
+      onClick: () => onSelect('stats'),
+      disabled: false,
+    },
+    {
+      key: 'factor-analysis',
+      label: 'ファクター分析',
+      icon: <DicePixelArt size={20} />,
+      isActive: activeTab === 'factor-analysis',
+      onClick: () => onSelect('factor-analysis'),
+      disabled: false,
+    },
+  ];
+
+  return (
+    <aside
+      className={`fixed left-0 top-0 h-full w-64 bg-white shadow-xl border-r border-pink-100 z-40 ${
+        isMobile ? '' : 'hidden md:flex'
+      } flex-col`}
+    >
+      <div className="px-6 pt-8 pb-6 border-b border-pink-100">
+        <div className="flex items-center gap-3">
+          <HorsePixelArt size={28} />
+          <div>
+            <p className="text-xs font-bold text-pink-500 uppercase tracking-widest">
+              Gyanchu Lab
+            </p>
+            <h1 className="text-2xl font-black text-gray-800">
+              予想ダッシュボード
+            </h1>
+          </div>
+        </div>
+        {isMobile && (
+          <button
+            onClick={onClose}
+            className="mt-4 inline-flex items-center justify-center rounded-full bg-gradient-to-r from-pink-400 to-purple-500 px-4 py-2 text-sm font-bold text-white shadow-lg hover:shadow-xl transition"
+          >
+            メニューを閉じる
+          </button>
+        )}
+      </div>
+
+      <nav className="flex-1 overflow-y-auto py-4">
+        <ul className="space-y-2 px-4">
+          {navItems.map((item) => (
+            <li key={item.key}>
+              <button
+                onClick={() => {
+                  if (item.disabled) return;
+                  item.onClick();
+                  if (isMobile && onClose) {
+                    onClose();
+                  }
+                }}
+                className={`w-full text-left px-4 py-3 rounded-2xl transition flex items-center gap-3 font-bold ${
+                  item.disabled
+                    ? 'text-gray-400 cursor-not-allowed bg-gray-100 border-l-4 border-transparent'
+                    : item.isActive
+                    ? 'bg-gradient-to-r from-pink-50 to-purple-50 text-pink-600 border-l-4 border-pink-500 shadow-md'
+                    : 'text-gray-700 hover:bg-pink-50 border-l-4 border-transparent'
+                }`}
+              >
+                <span className="flex items-center justify-center rounded-lg bg-pink-100 text-pink-600 p-1.5">
+                  {item.icon}
+                </span>
+                <span className="text-sm leading-tight">{item.label}</span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      </nav>
+
+      <div className="px-6 py-5 border-t border-pink-100 text-xs text-gray-500 font-bold space-y-2">
+        <p>バージョン 3.x</p>
+        <p>データと可視化はピンク&パープルテーマを継承しています。</p>
+      </div>
+    </aside>
+  );
+};
+
 // Firebase設定
 const firebaseConfig = {
   apiKey: "AIzaSyBLXleQ28dQR-uDTKlYXSevefzc0vowh9k",
@@ -257,6 +365,7 @@ const HorseAnalysisApp = () => {
   const [expCoefficient, setExpCoefficient] = useState(0.1);
   const [showExpModal, setShowExpModal] = useState(false);
   const [tempExpCoefficient, setTempExpCoefficient] = useState(0.1);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   // 🎲 仮想レース関連のstate
   const [showVirtualRaceModal, setShowVirtualRaceModal] = useState(false);
@@ -380,6 +489,32 @@ const HorseAnalysisApp = () => {
     }
     
     return redistributed;
+  };
+
+  const handleSidebarSelect = (target) => {
+    switch (target) {
+      case 'races-upcoming':
+        setActiveTab('races-upcoming');
+        break;
+      case 'settings':
+        if (isAdmin) {
+          setActiveTab('settings');
+        }
+        break;
+      case 'stats':
+        setActiveTab('stats');
+        break;
+      case 'factor-analysis':
+        setActiveTab('factor-analysis');
+        setShowFactorAnalysisModal(true);
+        break;
+      default:
+        break;
+    }
+
+    if (target !== 'factor-analysis') {
+      setShowFactorAnalysisModal(false);
+    }
   };
   
   // 勝率に基づいて1頭を抽選（改善版：累積確率法を使用）
@@ -3053,13 +3188,49 @@ const HorseAnalysisApp = () => {
 
   if (isLoading) {
     return (
-      <div className="w-full min-h-screen bg-gradient-to-br from-pink-100 via-purple-50 to-blue-100 flex items-center justify-center">
-        <div className="text-center">
-          <div className="flex justify-center mb-4">
-            <HorsePixelArt size={48} />
+      <div className="min-h-screen bg-gradient-to-br from-pink-100 via-purple-50 to-blue-100">
+        <Sidebar
+          activeTab={activeTab}
+          onSelect={handleSidebarSelect}
+          isAdmin={isAdmin}
+          onClose={() => setIsSidebarOpen(false)}
+        />
+
+        <div className="md:hidden fixed top-4 left-4 z-50">
+          <button
+            onClick={() => setIsSidebarOpen(true)}
+            className="inline-flex items-center justify-center rounded-full bg-white/80 px-4 py-2 text-sm font-bold text-pink-600 shadow-lg border border-pink-200"
+          >
+            ☰ メニュー
+          </button>
+        </div>
+
+        {isSidebarOpen && (
+          <div className="fixed inset-0 z-50 md:hidden">
+            <div
+              className="absolute inset-0 bg-black/30"
+              onClick={() => setIsSidebarOpen(false)}
+            />
+            <Sidebar
+              activeTab={activeTab}
+              onSelect={handleSidebarSelect}
+              isAdmin={isAdmin}
+              onClose={() => setIsSidebarOpen(false)}
+              isMobile
+            />
           </div>
-          <p className="text-gray-700 font-semibold mb-4 text-lg">読み込み中...</p>
-          <div className="animate-spin rounded-full h-12 w-12 border-4 border-purple-300 border-t-purple-600 mx-auto"></div>
+        )}
+
+        <div role="main" className="ml-0 md:ml-64 px-4 md:px-10 py-10">
+          <div className="flex min-h-[60vh] items-center justify-center">
+            <div className="bg-white/80 backdrop-blur rounded-3xl px-10 py-12 shadow-xl border border-pink-100 text-center">
+              <div className="flex justify-center mb-4">
+                <HorsePixelArt size={48} />
+              </div>
+              <p className="text-gray-700 font-semibold mb-4 text-xl">ロード中...</p>
+              <div className="animate-spin rounded-full h-12 w-12 border-4 border-purple-300 border-t-purple-600 mx-auto"></div>
+            </div>
+          </div>
         </div>
       </div>
     );
@@ -3069,8 +3240,41 @@ const HorseAnalysisApp = () => {
     const availableCourses = getAvailableCourses();
 
     return (
-      <div className="w-full min-h-screen bg-gradient-to-br from-pink-100 via-purple-50 to-blue-100 p-3 md:p-6">
-        <div className="max-w-4xl mx-auto">
+      <div className="min-h-screen bg-gradient-to-br from-pink-100 via-purple-50 to-blue-100">
+        <Sidebar
+          activeTab={activeTab}
+          onSelect={handleSidebarSelect}
+          isAdmin={isAdmin}
+          onClose={() => setIsSidebarOpen(false)}
+        />
+
+        <div className="md:hidden fixed top-4 left-4 z-50">
+          <button
+            onClick={() => setIsSidebarOpen(true)}
+            className="inline-flex items-center justify-center rounded-full bg-white/80 px-4 py-2 text-sm font-bold text-pink-600 shadow-lg border border-pink-200"
+          >
+            ☰ メニュー
+          </button>
+        </div>
+
+        {isSidebarOpen && (
+          <div className="fixed inset-0 z-50 md:hidden">
+            <div
+              className="absolute inset-0 bg-black/30"
+              onClick={() => setIsSidebarOpen(false)}
+            />
+            <Sidebar
+              activeTab={activeTab}
+              onSelect={handleSidebarSelect}
+              isAdmin={isAdmin}
+              onClose={() => setIsSidebarOpen(false)}
+              isMobile
+            />
+          </div>
+        )}
+
+        <div role="main" className="ml-0 md:ml-64 px-4 sm:px-6 lg:px-10 py-8 md:py-10">
+          <div className="max-w-5xl mx-auto">
           <div className="flex justify-between items-center mb-6 md:mb-8">
             <div className="text-center flex-1">
               <div className="flex items-center justify-center gap-2 md:gap-3 mb-2 md:mb-3">
@@ -3600,7 +3804,7 @@ const HorseAnalysisApp = () => {
             <div className="bg-white rounded-3xl p-4 md:p-8 shadow-lg border-2 border-blue-200">
               <div className="flex items-center gap-2 md:gap-3 mb-4 md:mb-6">
                 <BarPixelArt size={24} />
-                <h2 className="text-xl md:text-2xl font-bold text-gray-700">成績分析</h2>
+                <h2 className="text-2xl md:text-3xl font-bold text-gray-700">成績分析</h2>
               </div>
               
               <div className="flex gap-2 mb-4 md:mb-6 flex-wrap">
@@ -3812,7 +4016,7 @@ const HorseAnalysisApp = () => {
               <div className="bg-white rounded-3xl p-6 md:p-8 max-w-2xl w-full shadow-2xl max-h-[90vh] overflow-y-auto">
                 <div className="flex items-center gap-3 mb-6">
                   <span className="text-2xl">🔍</span>
-                  <h2 className="text-xl md:text-2xl font-bold text-gray-800">詳細検索</h2>
+                  <h2 className="text-2xl md:text-3xl font-bold text-gray-800">詳細検索</h2>
                 </div>
 
                 <div className="space-y-6">
@@ -4096,7 +4300,7 @@ const HorseAnalysisApp = () => {
               <div className="bg-white rounded-3xl p-6 md:p-8 max-w-2xl w-full shadow-2xl max-h-[90vh] overflow-y-auto">
                 <div className="flex items-center gap-3 mb-6">
                   <BarPixelArt size={32} />
-                  <h2 className="text-xl md:text-2xl font-bold text-gray-800">ファクター毎の的中率分析</h2>
+                <h2 className="text-2xl md:text-3xl font-bold text-gray-800">ファクター毎の的中率分析</h2>
                 </div>
 
                 {!factorAnalysisResults ? (
@@ -5057,6 +5261,7 @@ const HorseAnalysisApp = () => {
           )}
         </div>
       </div>
+    </div>
     );
   }
 
@@ -5068,29 +5273,72 @@ const HorseAnalysisApp = () => {
   const allFactorDeviations = calculateFactorDeviations(currentRace.horses);
 
   return (
-    <div className="w-full min-h-screen bg-gradient-to-br from-pink-100 via-purple-50 to-blue-100 p-3 md:p-6">
-      <div className="max-w-6xl mx-auto">
-        <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-3 md:gap-4 mb-6 md:mb-8 bg-white rounded-3xl p-3 md:p-6 shadow-lg border-2 border-pink-200">
-          <div className="flex-1 min-w-0 flex items-start gap-2 md:gap-3">
-            <HorsePixelArt size={28} />
-            <div className="min-w-0 flex-1">
-              <h1 className="text-xl md:text-4xl font-black bg-gradient-to-r from-pink-500 to-purple-500 bg-clip-text text-transparent break-words">
-                {currentRace.name}
-              </h1>
-              <p className="text-xs md:text-base text-gray-600 mt-1 md:mt-2 font-bold break-words">
-                {currentRace.createdAt} · {currentRace.horses.length}頭
-                {raceSelectedCourse && ` · ${raceSelectedCourse}`}
-                {isAdmin && ` · EXP係数: ${expCoefficient}`}
-              </p>
+    <div className="min-h-screen bg-gradient-to-br from-pink-100 via-purple-50 to-blue-100">
+      <Sidebar
+        activeTab={activeTab}
+        onSelect={handleSidebarSelect}
+        isAdmin={isAdmin}
+        onClose={() => setIsSidebarOpen(false)}
+      />
+
+      <div className="md:hidden fixed top-4 left-4 z-50">
+        <button
+          onClick={() => setIsSidebarOpen(true)}
+          className="inline-flex items-center justify-center rounded-full bg-white/80 px-4 py-2 text-sm font-bold text-pink-600 shadow-lg border border-pink-200"
+        >
+          ☰ メニュー
+        </button>
+      </div>
+
+      {isSidebarOpen && (
+        <div className="fixed inset-0 z-50 md:hidden">
+          <div
+            className="absolute inset-0 bg-black/30"
+            onClick={() => setIsSidebarOpen(false)}
+          />
+          <Sidebar
+            activeTab={activeTab}
+            onSelect={handleSidebarSelect}
+            isAdmin={isAdmin}
+            onClose={() => setIsSidebarOpen(false)}
+            isMobile
+          />
+        </div>
+      )}
+
+      <div role="main" className="ml-0 md:ml-64 px-4 sm:px-6 lg:px-10 py-8 md:py-10">
+        <div className="max-w-6xl mx-auto space-y-6 md:space-y-8">
+          <div className="relative rounded-3xl border-2 border-pink-200 bg-white p-4 md:p-6 shadow-lg">
+            <div className="flex flex-col md:flex-row md:items-center gap-4 md:gap-6">
+              <div className="flex items-start gap-3 flex-1 min-w-0">
+                <div className="hidden md:flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-pink-200 to-purple-200 shadow-inner">
+                  <HorsePixelArt size={28} />
+                </div>
+                <div className="md:hidden flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-br from-pink-200 to-purple-200 shadow-inner">
+                  <HorsePixelArt size={22} />
+                </div>
+                <div className="min-w-0">
+                  <h1 className="text-2xl md:text-4xl lg:text-5xl font-black bg-gradient-to-r from-pink-500 to-purple-500 bg-clip-text text-transparent leading-tight break-words">
+                    {currentRace.name}
+                  </h1>
+                  <p className="mt-2 text-xs md:text-base text-gray-600 font-bold break-words space-x-2">
+                    <span>{currentRace.createdAt}</span>
+                    <span>· {currentRace.horses.length}頭</span>
+                    {raceSelectedCourse && <span>· {raceSelectedCourse}</span>}
+                    {isAdmin && <span>· EXP係数: {expCoefficient}</span>}
+                  </p>
+                </div>
+              </div>
+              <div className="flex w-full md:w-auto justify-end">
+                <button
+                  onClick={() => setCurrentRace(null)}
+                  className="inline-flex items-center justify-center rounded-full bg-gray-400 px-4 md:px-6 py-2 md:py-3 text-sm md:text-base font-bold text-white shadow-lg transition hover:bg-gray-500 hover:shadow-xl"
+                >
+                  ← 戻る
+                </button>
+              </div>
             </div>
           </div>
-          <button
-            onClick={() => setCurrentRace(null)}
-            className="w-full md:w-auto px-4 md:px-6 py-2 md:py-3 bg-gray-400 text-white rounded-full font-bold hover:bg-gray-500 hover:scale-105 transition transform shadow-lg text-sm md:text-base"
-          >
-            ← 戻る
-          </button>
-        </div>
 
         {currentRace.result && (
           <div className="bg-gradient-to-r from-green-100 to-green-200 border-2 border-green-400 rounded-3xl p-4 md:p-6 mb-4 md:mb-6 shadow-lg">
@@ -5100,7 +5348,7 @@ const HorseAnalysisApp = () => {
         )}
 
         <div className="bg-white rounded-3xl p-3 md:p-6 shadow-lg mb-4 md:mb-6 border-2 border-pink-200">
-          <h2 className="text-base md:text-xl font-bold text-gray-700 mb-3 md:mb-4 flex items-center gap-2">
+          <h2 className="text-lg md:text-3xl font-bold text-gray-700 mb-3 md:mb-4 flex items-center gap-2">
             <StarPixelArt size={20} />
             ファクター選択
           </h2>
@@ -5139,18 +5387,20 @@ const HorseAnalysisApp = () => {
           )}
         </div>
 
-        <div className="bg-white rounded-3xl p-3 md:p-6 shadow-lg mb-4 md:mb-6 border-2 border-purple-200">
-          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3 mb-4 md:mb-6">
-            <div className="flex items-start gap-2">
-              <CrownPixelArt size={24} />
+        <div className="bg-white rounded-3xl p-4 md:p-6 shadow-lg mb-4 md:mb-6 border-2 border-purple-200">
+          <div className="relative">
+            <div className="flex items-start gap-2 pr-0 md:pr-64">
+              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-pink-200 to-purple-200 shadow-inner">
+                <CrownPixelArt size={24} />
+              </div>
               <div>
-                <h2 className="text-lg md:text-2xl font-bold text-gray-700">勝率ランキング</h2>
+                <h2 className="text-xl md:text-3xl font-black text-gray-800">勝率ランキング</h2>
                 {raceSelectedCourse && (
                   <p className="text-xs md:text-sm text-gray-600 mt-1 font-bold">コース: {raceSelectedCourse}</p>
                 )}
               </div>
             </div>
-            <div className="flex gap-2 flex-wrap w-full md:w-auto">
+            <div className="mt-3 md:mt-0 flex gap-2 flex-wrap w-full justify-end md:w-auto md:absolute md:top-0 md:right-0">
               {isAdmin && (
                 <>
                   <button
@@ -5226,8 +5476,22 @@ const HorseAnalysisApp = () => {
             </div>
           </div>
 
-          <div className="space-y-2">
-            {resultsWithRate.map((horse, idx) => {
+        <div className="rounded-3xl border border-purple-100 shadow-inner overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-pink-100 text-sm md:text-base">
+              <thead className="bg-white sticky top-0 z-10">
+                <tr className="text-left text-xs md:text-sm font-bold text-gray-500 uppercase tracking-widest">
+                  <th className="px-4 py-3 md:py-4 w-20 md:w-24">順位</th>
+                  <th className="px-4 py-3 md:py-4 min-w-[200px]">馬番・馬名</th>
+                  <th className="px-4 py-3 md:py-4 w-48 md:w-56">勝率</th>
+                  <th className="px-4 py-3 md:py-4 w-32 text-right">オッズ</th>
+                  <th className="px-4 py-3 md:py-4 w-36 text-right">期待値</th>
+                  <th className="px-4 py-3 md:py-4 w-48">ファクター評価</th>
+                  <th className="px-4 py-3 md:py-4 w-20 text-right">操作</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-pink-50">
+                {resultsWithRate.map((horse, idx) => {
               const odds = oddsInput[horse.horseNum] || 0;
               const value = odds * horse.winRate;
               
@@ -5263,121 +5527,171 @@ const HorseAnalysisApp = () => {
               });
               
               const isCutoffFailed = failedFactors.length > 0;
+              const factorValues = Object.values(allFactorDeviations).reduce((acc, factorMap) => {
+                const raw = factorMap?.[horse.horseNum];
+                if (raw !== null && raw !== undefined && !Number.isNaN(parseFloat(raw))) {
+                  acc.push(parseFloat(raw));
+                }
+                return acc;
+              }, []);
+              const factorAverage =
+                factorValues.length > 0
+                  ? factorValues.reduce((sum, val) => sum + val, 0) / factorValues.length
+                  : null;
+              const factorStrength = factorAverage !== null
+                ? Math.min(Math.max((factorAverage / 70) * 100, 0), 100)
+                : 0;
+              const rowBase = idx % 2 === 0 ? 'bg-white' : 'bg-purple-50/60';
+              const topHighlight =
+                idx === 0
+                  ? 'bg-gradient-to-r from-pink-50 via-purple-50 to-blue-50'
+                  : idx === 1
+                  ? 'bg-gradient-to-r from-purple-50 via-white to-pink-50'
+                  : idx === 2
+                  ? 'bg-gradient-to-r from-blue-50 via-pink-50 to-purple-50'
+                  : '';
+              const rowClass = `${topHighlight || rowBase} ${isCutoffFailed ? 'opacity-70' : ''} hover:bg-pink-50 transition`;
+              const expectationBadgeClass =
+                odds > 0 && value >= 150
+                  ? 'bg-gradient-to-r from-yellow-300 via-yellow-200 to-yellow-100 text-yellow-900'
+                  : odds > 0 && value >= 100
+                  ? 'bg-yellow-100 text-yellow-700'
+                  : 'bg-gray-50 text-gray-600';
               
               return (
                 <React.Fragment key={horse.horseNum}>
-                  <div
-                    className={`p-3 md:p-4 rounded-2xl border-2 transition ${
-                      isCutoffFailed
-                        ? 'bg-gray-300 border-gray-400 opacity-70'
-                        : isSuperExpectation
-                        ? 'bg-gradient-to-r from-yellow-300 to-orange-300 border-yellow-500 shadow-lg' 
-                        : isGoodExpectation && odds > 0
-                        ? 'bg-yellow-200 border-yellow-400' 
-                        : idx === 0 ? 'bg-gradient-to-r from-pink-200 to-purple-200 border-pink-400' : 'bg-white border-gray-200'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2 md:gap-4 flex-1 min-w-0">
-                        <div className="text-xl md:text-3xl font-black text-gray-700 w-12 md:min-w-16 text-center flex-shrink-0">
-                          {idx + 1}位
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="text-sm md:text-lg font-bold text-gray-800 flex items-center gap-2 truncate">
-                            {horseMarks[horse.horseNum] ? (
-                              <span className="px-2 py-1 bg-yellow-200 text-yellow-800 rounded-lg text-sm font-bold border-2 border-yellow-400 flex-shrink-0">
-                                {horseMarks[horse.horseNum]}
-                              </span>
-                            ) : (
-                              <HorsePixelArt size={16} />
-                            )}
-                            {horse.horseNum}. {horse.name}
-                            {isAdmin && (
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setEditingHorseMark(horse.horseNum);
-                                  setTempHorseMark(horseMarks[horse.horseNum] || '');
-                                }}
-                                className="px-2 py-0.5 bg-blue-400 text-white rounded text-xs font-bold hover:bg-blue-500 transition"
-                              >
-                                ✏️印
-                              </button>
-                            )}
+                  <tr className={rowClass}>
+                    <td className="px-4 py-3 md:py-4 align-middle">
+                      <div className="text-2xl md:text-3xl font-black font-mono text-gray-800 flex items-center gap-1">
+                        {idx + 1}
+                        <span className="text-xs font-bold text-gray-500">位</span>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 md:py-4 align-middle">
+                      <div className="flex items-center gap-3">
+                        {horseMarks[horse.horseNum] ? (
+                          <span className="px-2 py-1 bg-yellow-200 text-yellow-800 rounded-lg text-xs font-bold border border-yellow-400">
+                            {horseMarks[horse.horseNum]}
+                          </span>
+                        ) : (
+                          <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-gradient-to-br from-pink-100 to-purple-100">
+                            <HorsePixelArt size={16} />
                           </div>
+                        )}
+                        <div className="min-w-0">
+                          <p className="text-sm md:text-lg font-bold text-gray-800 truncate">
+                            {horse.horseNum}. {horse.name}
+                          </p>
                           {odds > 0 && (
-                            <div className="text-xs text-gray-700 mt-1 font-bold">
-                              オッズ{odds.toFixed(1)}×勝{horse.winRate.toFixed(1)}％＝{value.toFixed(0)}
-                              {expectationRanking[horse.horseNum] && (
-                                <span className="text-purple-600 ml-1">（期待値{expectationRanking[horse.horseNum]}位）</span>
-                              )}
-                            </div>
+                            <p className="text-2xs md:text-xs text-gray-500 font-bold mt-1">
+                              {expectationRanking[horse.horseNum]
+                                ? `期待値順位 ${expectationRanking[horse.horseNum]}位`
+                                : '期待値データ取得中'}
+                            </p>
                           )}
                           {isCutoffFailed && (
-                            <div className="mt-2 flex items-center gap-2 flex-wrap">
-                              <span className="px-2 py-1 bg-red-100 text-red-800 rounded-lg text-xs font-bold border-2 border-red-400 flex items-center gap-1">
-                                ⚠️ 基準未達
-                              </span>
-                              <div className="flex items-center gap-1 flex-wrap">
-                                {failedFactors.map((factorKey, fIdx) => {
-                                  const deviation = allFactorDeviations[factorKey]?.[horse.horseNum];
-                                  const cutoff = cutoffDeviations[factorKey];
-                                  return (
-                                    <span
-                                      key={fIdx}
-                                      className="px-2 py-0.5 bg-orange-100 text-orange-800 rounded text-xs font-bold border border-orange-400"
-                                      title={`${factorKey}: 偏差値${deviation !== null && deviation !== undefined ? deviation.toFixed(1) : 'N/A'} (基準: ${cutoff}以上)`}
-                                    >
-                                      {factorKey}
-                                    </span>
-                                  );
-                                })}
-                              </div>
+                            <div className="mt-2 inline-flex items-center gap-1 rounded-full bg-red-100 px-2 py-1 text-[10px] font-bold text-red-700 border border-red-300">
+                              ⚠️ 基準未達
                             </div>
                           )}
                         </div>
                       </div>
-                      <div className="text-right flex-shrink-0">
-                        <div className="text-2xl md:text-3xl font-black bg-gradient-to-r from-pink-600 to-purple-600 bg-clip-text text-transparent">
+                    </td>
+                    <td className="px-4 py-3 md:py-4 align-middle">
+                      <div className="flex items-center gap-3">
+                        <div className="text-2xl md:text-3xl font-black font-mono text-gray-800">
                           {horse.winRate.toFixed(1)}%
                         </div>
-                        {odds > 0 && (
-                          <div className={`text-xs md:text-sm font-bold mt-1 flex items-center justify-end gap-1 ${
-                            isSuperExpectation ? 'text-orange-700' : isGoodExpectation ? 'text-yellow-700' : 'text-gray-600'
-                          }`}>
-                            {isSuperExpectation && (
-                              <>
-                                <span className="hidden md:inline">💎超期待値馬！</span>
-                                <span className="md:hidden">💎超期待</span>
-                                <StarPixelArt size={14} />
-                              </>
-                            )}
-                            {isGoodExpectation && (
-                              <>
-                                <span className="hidden md:inline">✨期待値馬！</span>
-                                <span className="md:hidden">✨期待</span>
-                                <StarPixelArt size={14} />
-                              </>
-                            )}
+                        <div className="flex-1 h-2 rounded-full bg-gray-200 overflow-hidden">
+                          <div
+                            className="h-full bg-gradient-to-r from-pink-400 via-purple-400 to-purple-500"
+                            style={{ width: `${Math.min(Math.max(horse.winRate, 0), 100)}%` }}
+                          />
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 md:py-4 align-middle text-right">
+                      <span className="text-lg font-bold font-mono text-gray-700">
+                        {odds > 0 ? odds.toFixed(1) : '—'}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 md:py-4 align-middle text-right">
+                      <span className={`inline-flex items-center justify-end rounded-full px-3 py-2 text-sm md:text-base font-bold font-mono ${expectationBadgeClass}`}>
+                        {odds > 0 ? Math.round(value).toString() : '—'}
+                      </span>
+                      {(isSuperExpectation || isGoodExpectation) && (
+                        <div className="mt-1 flex items-center justify-end gap-1 text-xs font-bold text-yellow-700">
+                          <StarPixelArt size={14} />
+                          {isSuperExpectation ? '超期待値馬' : '期待値馬'}
+                        </div>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 md:py-4 align-middle">
+                      <div className="space-y-2">
+                        <div className="h-2 rounded-full bg-gray-200 overflow-hidden">
+                          <div
+                            className="h-full bg-gradient-to-r from-purple-300 via-pink-300 to-pink-500"
+                            style={{ width: `${factorStrength}%` }}
+                          />
+                        </div>
+                        <div className="flex items-center justify-between text-[11px] md:text-xs text-gray-600 font-bold">
+                          <span>平均偏差値</span>
+                          <span className="font-mono">
+                            {factorAverage !== null ? factorAverage.toFixed(1) : '—'}
+                          </span>
+                        </div>
+                        {failedFactors.length > 0 && (
+                          <div className="flex flex-wrap gap-1">
+                            {failedFactors.map((factorKey, fIdx) => {
+                              const deviation = allFactorDeviations[factorKey]?.[horse.horseNum];
+                              const cutoff = cutoffDeviations[factorKey];
+                              return (
+                                <span
+                                  key={fIdx}
+                                  className="px-2 py-0.5 rounded-full bg-orange-100 text-orange-700 text-[10px] font-bold border border-orange-300"
+                                  title={`${factorKey}: 偏差値${deviation !== null && deviation !== undefined ? deviation.toFixed(1) : 'N/A'} (基準: ${cutoff}以上)`}
+                                >
+                                  {factorKey}
+                                </span>
+                              );
+                            })}
                           </div>
                         )}
                       </div>
-                    </div>
-                  </div>
-                  
-                  {/* 🎯 勝率の断層を表示 */}
+                    </td>
+                    <td className="px-4 py-3 md:py-4 align-middle text-right">
+                      {isAdmin && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setEditingHorseMark(horse.horseNum);
+                            setTempHorseMark(horseMarks[horse.horseNum] || '');
+                          }}
+                          className="inline-flex items-center justify-center rounded-full bg-blue-400 px-3 py-1 text-xs font-bold text-white shadow hover:bg-blue-500 transition"
+                        >
+                          ✏️印
+                        </button>
+                      )}
+                    </td>
+                  </tr>
                   {winRateGaps.includes(idx) && (
-                    <div className="flex items-center gap-2 my-1">
-                      <div className="flex-1 h-0.5 bg-gradient-to-r from-transparent via-red-400 to-transparent"></div>
-                      <span className="text-xs font-bold text-red-600 px-2 py-0.5 bg-red-50 rounded-full border border-red-300">
-                        断層 ({(resultsWithRate[idx].winRate - resultsWithRate[idx + 1].winRate).toFixed(1)}%差)
-                      </span>
-                      <div className="flex-1 h-0.5 bg-gradient-to-r from-transparent via-red-400 to-transparent"></div>
-                    </div>
+                    <tr>
+                      <td colSpan={7} className="px-4 pb-3">
+                        <div className="flex items-center gap-2 text-xs font-bold text-red-600">
+                          <div className="flex-1 h-px bg-gradient-to-r from-transparent via-red-400 to-transparent" />
+                          断層 ({(resultsWithRate[idx].winRate - resultsWithRate[idx + 1].winRate).toFixed(1)}%差)
+                          <div className="flex-1 h-px bg-gradient-to-r from-transparent via-red-400 to-transparent" />
+                        </div>
+                      </td>
+                    </tr>
                   )}
                 </React.Fragment>
               );
             })}
+              </tbody>
+            </table>
+          </div>
+        </div>
 
             {Object.keys(excludedHorses).length > 0 && (
               <div className="mt-4 md:mt-6 pt-3 md:pt-4 border-t-2 border-gray-300">
@@ -6652,10 +6966,15 @@ const HorseAnalysisApp = () => {
         )}
       </div>
     </div>
-  );
+);
 };
 
 export default HorseAnalysisApp;
+
+
+
+
+
 
 
 
