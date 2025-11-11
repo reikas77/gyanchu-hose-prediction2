@@ -194,11 +194,11 @@ const Sidebar = ({
         <div className="flex items-center gap-3">
           <HorsePixelArt size={28} />
           <div>
-            <p className="text-xs font-bold text-pink-500 uppercase tracking-widest">
+            <p className="text-xs font-bold text-pink-500 uppercase tracking-[0.3em]">
               Gyanchu Lab
             </p>
-            <h1 className="text-2xl font-black text-gray-800">
-              予想ダッシュボード
+            <h1 className="text-2xl font-black bg-gradient-to-r from-pink-400 via-purple-500 to-blue-500 bg-clip-text text-transparent">
+              カテゴリ
             </h1>
           </div>
         </div>
@@ -235,16 +235,27 @@ const Sidebar = ({
                 <span className="flex items-center justify-center rounded-lg bg-pink-100 text-pink-600 p-1.5">
                   {item.icon}
                 </span>
-                <span className="text-sm leading-tight">{item.label}</span>
+                <span className="text-[13px] leading-tight whitespace-nowrap">{item.label}</span>
               </button>
             </li>
           ))}
         </ul>
       </nav>
 
+      <div className="px-4 pb-4">
+        <button
+          onClick={() => setShowAdminModal(true)}
+          className="w-full text-left px-4 py-3 rounded-2xl transition flex items-center gap-3 font-bold text-sm text-purple-600 hover:bg-purple-50 border-l-4 border-transparent hover:border-purple-500"
+        >
+          <span className="flex items-center justify-center rounded-lg bg-purple-100 text-purple-600 p-1.5">
+            <span className="text-lg">⚙️</span>
+          </span>
+          <span className="text-[13px] leading-tight whitespace-nowrap">管理者の方はこちら</span>
+        </button>
+      </div>
+
       <div className="px-6 py-5 border-t border-pink-100 text-xs text-gray-500 font-bold space-y-2">
         <p>バージョン 3.x</p>
-        <p>データと可視化はピンク&パープルテーマを継承しています。</p>
       </div>
     </aside>
   );
@@ -299,7 +310,7 @@ const HorseAnalysisApp = () => {
       Notification.requestPermission();
     }
   }, []);
-  
+
   const [races, setRaces] = useState([]);
   const [currentRace, setCurrentRace] = useState(null);
   const [pasteText, setPasteText] = useState('');
@@ -450,9 +461,16 @@ const HorseAnalysisApp = () => {
   const [horseMarks, setHorseMarks] = useState({}); // { horseNum: mark } の形式
   const [editingHorseMark, setEditingHorseMark] = useState(null);
   const [tempHorseMark, setTempHorseMark] = useState('');
+  const [expandedHorseNum, setExpandedHorseNum] = useState(null);
+  useEffect(() => {
+    setExpandedHorseNum(null);
+  }, [currentRace?.firebaseId, currentRace?.id]);
 
   // 仮想レース視覚化用のstate
   const [showTrackDiagram, setShowTrackDiagram] = useState(false);
+
+  // 勝率ランキング 詳細表示
+  const [expandedHorseId, setExpandedHorseId] = useState(null);
 
   // 足切り偏差値設定用のstate（各ファクターごと）
   const [cutoffDeviations, setCutoffDeviations] = useState({
@@ -515,6 +533,10 @@ const HorseAnalysisApp = () => {
     if (target !== 'factor-analysis') {
       setShowFactorAnalysisModal(false);
     }
+  };
+
+  const toggleHorseDetails = (horseNum) => {
+    setExpandedHorseId((prev) => (prev === horseNum ? null : horseNum));
   };
   
   // 勝率に基づいて1頭を抽選（改善版：累積確率法を使用）
@@ -3275,74 +3297,25 @@ const HorseAnalysisApp = () => {
         )}
 
         <div role="main" className="ml-0 md:ml-64 px-4 sm:px-6 lg:px-10 py-8 md:py-10">
-          <div className="max-w-5xl mx-auto">
-          <div className="flex justify-between items-center mb-6 md:mb-8">
-            <div className="text-center flex-1">
-              <div className="flex items-center justify-center gap-2 md:gap-3 mb-2 md:mb-3">
-                <HorsePixelArt size={32} />
-                <h1 className="text-3xl md:text-5xl font-black bg-gradient-to-r from-pink-500 to-purple-500 bg-clip-text text-transparent">
+        <div className="max-w-5xl mx-auto">
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 md:gap-6 mb-8 relative">
+            <div className="flex-1">
+              <div className="mx-auto md:mx-0 inline-flex items-center gap-2 md:gap-3 px-4 py-3 rounded-full bg-white/70 backdrop-blur shadow-lg border border-pink-100">
+                <HorsePixelArt size={28} />
+                <h1 className="text-2xl sm:text-4xl lg:text-5xl font-black bg-gradient-to-r from-pink-500 via-purple-500 to-blue-500 bg-clip-text text-transparent whitespace-nowrap">
                   ギャン中の予想部屋
                 </h1>
-                <HorsePixelArt size={32} />
+                <HorsePixelArt size={28} className="hidden sm:block" />
               </div>
-              <p className="text-gray-600 text-sm md:text-lg">期待値のある馬を探して競馬ライフをもっと楽しく✨</p>
+              <p className="mt-4 text-center md:text-left text-gray-600 text-sm sm:text-base md:text-lg leading-relaxed">
+                期待値のある馬を探して、みんなの競馬ライフをもっと楽しく✨
+              </p>
             </div>
             <button
               onClick={() => setShowAdminModal(true)}
-              className="text-2xl md:text-3xl hover:scale-110 transition transform"
+              className="self-end md:self-start inline-flex items-center justify-center h-12 w-12 rounded-full bg-white shadow-lg border border-purple-200 text-2xl hover:shadow-2xl hover:-translate-y-1 transition md:hidden"
             >
               ⚙️
-            </button>
-          </div>
-
-          <div className="flex gap-2 mb-6 md:mb-8 flex-wrap justify-center">
-            <button
-              onClick={() => setActiveTab('races-upcoming')}
-              className={`px-4 md:px-8 py-2 md:py-3 rounded-full font-bold text-sm md:text-base shadow-lg hover:shadow-2xl hover:scale-105 transition transform flex items-center gap-2 ${
-                activeTab === 'races-upcoming' || activeTab === 'races-past'
-                  ? 'bg-gradient-to-r from-pink-400 to-pink-500 text-white'
-                  : 'bg-white text-gray-700 hover:bg-gray-100'
-              }`}
-            >
-              <HorsePixelArt size={20} />
-              レース予想
-            </button>
-            <button
-              onClick={() => setActiveTab('settings')}
-              className={`px-4 md:px-8 py-2 md:py-3 rounded-full font-bold text-sm md:text-base shadow-lg hover:shadow-2xl hover:scale-105 transition transform flex items-center gap-2 ${
-                activeTab === 'settings'
-                  ? 'bg-gradient-to-r from-purple-400 to-purple-500 text-white'
-                  : 'bg-white text-gray-700 hover:bg-gray-100'
-              }`}
-              disabled={!isAdmin}
-            >
-              <CrownPixelArt size={20} />
-              コース設定
-            </button>
-            <button
-              onClick={() => setActiveTab('stats')}
-              className={`px-4 md:px-8 py-2 md:py-3 rounded-full font-bold text-sm md:text-base shadow-lg hover:shadow-2xl hover:scale-105 transition transform flex items-center gap-2 ${
-                activeTab === 'stats'
-                  ? 'bg-gradient-to-r from-blue-400 to-blue-500 text-white'
-                  : 'bg-white text-gray-700 hover:bg-gray-100'
-              }`}
-            >
-              <BarPixelArt size={20} />
-              成績分析
-            </button>
-            <button
-              onClick={() => {
-                setActiveTab('factor-analysis');
-                setShowFactorAnalysisModal(true);
-              }}
-              className={`px-4 md:px-8 py-2 md:py-3 rounded-full font-bold text-sm md:text-base shadow-lg hover:shadow-2xl hover:scale-105 transition transform flex items-center gap-2 ${
-                activeTab === 'factor-analysis'
-                  ? 'bg-gradient-to-r from-purple-400 to-purple-500 text-white'
-                  : 'bg-white text-gray-700 hover:bg-gray-100'
-              }`}
-            >
-              <BarPixelArt size={20} />
-              ファクター分析
             </button>
           </div>
 
@@ -5273,6 +5246,55 @@ const HorseAnalysisApp = () => {
   const winRateGaps = detectWinRateGaps(resultsWithRate);
   const allFactorDeviations = calculateFactorDeviations(currentRace.horses);
 
+  const factorKeys = Object.keys(allFactorDeviations || {});
+  const activeHorseNums = resultsWithRate.map(horse => horse.horseNum);
+
+  const factorTotals = {};
+  const factorAverages = {};
+  const validFactorCounts = {};
+
+  activeHorseNums.forEach(horseNum => {
+    let total = 0;
+    let count = 0;
+    factorKeys.forEach(factorKey => {
+      const deviation = allFactorDeviations[factorKey]?.[horseNum];
+      if (deviation !== null && deviation !== undefined && !Number.isNaN(deviation)) {
+        total += deviation;
+        count += 1;
+      }
+    });
+    factorTotals[horseNum] = count > 0 ? total : null;
+    factorAverages[horseNum] = count > 0 ? total / count : null;
+    validFactorCounts[horseNum] = count;
+  });
+
+  const createRanking = (valuesMap) => {
+    const rankingEntries = Object.entries(valuesMap)
+      .filter(([, value]) => value !== null && value !== undefined && !Number.isNaN(value))
+      .sort((a, b) => b[1] - a[1]);
+
+    const ranking = {};
+    rankingEntries.forEach(([horseNum], idx) => {
+      ranking[horseNum] = idx + 1;
+    });
+    return ranking;
+  };
+
+  const totalDeviationRanking = createRanking(factorTotals);
+  const averageDeviationRanking = createRanking(factorAverages);
+
+  const factorRankings = {};
+  factorKeys.forEach(factorKey => {
+    const map = {};
+    activeHorseNums.forEach(horseNum => {
+      const deviation = allFactorDeviations[factorKey]?.[horseNum];
+      if (deviation !== null && deviation !== undefined && !Number.isNaN(deviation)) {
+        map[horseNum] = deviation;
+      }
+    });
+    factorRankings[factorKey] = createRanking(map);
+  });
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-pink-100 via-purple-50 to-blue-100">
       <Sidebar
@@ -5477,221 +5499,233 @@ const HorseAnalysisApp = () => {
             </div>
           </div>
 
-        <div className="rounded-3xl border border-purple-100 shadow-inner overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-pink-100 text-sm md:text-base">
-              <thead className="bg-white sticky top-0 z-10">
-                <tr className="text-left text-xs md:text-sm font-bold text-gray-500 uppercase tracking-widest">
-                  <th className="px-4 py-3 md:py-4 w-20 md:w-24">順位</th>
-                  <th className="px-4 py-3 md:py-4 min-w-[200px]">馬番・馬名</th>
-                  <th className="px-4 py-3 md:py-4 w-48 md:w-56">勝率</th>
-                  <th className="px-4 py-3 md:py-4 w-32 text-right">オッズ</th>
-                  <th className="px-4 py-3 md:py-4 w-36 text-right">期待値</th>
-                  <th className="px-4 py-3 md:py-4 w-48">ファクター評価</th>
-                  <th className="px-4 py-3 md:py-4 w-20 text-right">操作</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-pink-50">
-                {resultsWithRate.map((horse, idx) => {
-              const odds = oddsInput[horse.horseNum] || 0;
-              const value = odds * horse.winRate;
-              
-              const isSuperExpectation = horse.winRate >= 10 && value >= 220;
-              const isGoodExpectation = horse.winRate >= 10 && value >= 150 && value < 220;
-              
-              // 全ファクターの偏差値をチェックして、基準未達のファクターを特定
-              const failedFactors = [];
-              Object.keys(cutoffDeviations).forEach(factorKey => {
-                const cutoffRaw = cutoffDeviations[factorKey];
-                // 足切り設定がnull/undefinedの場合は判定から除外
-                if (cutoffRaw !== null && cutoffRaw !== undefined && !isNaN(cutoffRaw)) {
-                  const cutoff = parseFloat(cutoffRaw);
-                  const deviationRaw = allFactorDeviations[factorKey]?.[horse.horseNum];
-                  const deviation = deviationRaw !== null && deviationRaw !== undefined
-                    ? parseFloat(deviationRaw)
-                    : null;
-                  // 偏差値が数値として存在する場合のみ判定
-                  // 偏差値がnull/undefinedの場合は、そのファクターの判定から除外（データがないため）
-                  if (deviation !== null && !Number.isNaN(deviation)) {
-                    // 偏差値が基準値未満の場合のみ基準未達
-                    if (deviation + 1e-6 < cutoff) {
-                      failedFactors.push(factorKey);
-                    }
-                  }
-                  // 偏差値がnull/undefinedの場合は判定から除外（データがないため基準未達とはしない）
-                  
-                  // デバッグ用ログ（管理者のみ）
-                  if (isAdmin && idx === 0 && horse.horseNum === 1) {
-                    console.log(`[足切り判定] ${factorKey}: 基準=${cutoff}, 偏差値=${deviation}, 判定=${deviation !== null && deviation !== undefined && !isNaN(deviation) ? (deviation < cutoff ? '未達' : '達成') : 'データなし'}`);
-                  }
-                }
-              });
-              
-              const isCutoffFailed = failedFactors.length > 0;
-              const factorValues = Object.values(allFactorDeviations).reduce((acc, factorMap) => {
-                const raw = factorMap?.[horse.horseNum];
-                if (raw !== null && raw !== undefined && !Number.isNaN(parseFloat(raw))) {
-                  acc.push(parseFloat(raw));
-                }
-                return acc;
-              }, []);
-              const factorAverage =
-                factorValues.length > 0
-                  ? factorValues.reduce((sum, val) => sum + val, 0) / factorValues.length
+        <div className="space-y-3">
+          {resultsWithRate.map((horse, idx) => {
+            const odds = oddsInput[horse.horseNum] || 0;
+            const value = odds * horse.winRate;
+
+            const isSuperExpectation = horse.winRate >= 10 && value >= 220;
+            const isGoodExpectation = horse.winRate >= 10 && value >= 150 && value < 220;
+
+            const failedFactors = [];
+            Object.keys(cutoffDeviations).forEach(factorKey => {
+              const cutoffRaw = cutoffDeviations[factorKey];
+              if (cutoffRaw !== null && cutoffRaw !== undefined && !Number.isNaN(cutoffRaw)) {
+                const cutoff = parseFloat(cutoffRaw);
+                const deviationRaw = allFactorDeviations[factorKey]?.[horse.horseNum];
+                const deviation = deviationRaw !== null && deviationRaw !== undefined
+                  ? parseFloat(deviationRaw)
                   : null;
-              const factorStrength = factorAverage !== null
-                ? Math.min(Math.max((factorAverage / 70) * 100, 0), 100)
-                : 0;
-              const rowBase = idx % 2 === 0 ? 'bg-white' : 'bg-purple-50/60';
-              const topHighlight =
-                idx === 0
-                  ? 'bg-gradient-to-r from-pink-50 via-purple-50 to-blue-50'
-                  : idx === 1
-                  ? 'bg-gradient-to-r from-purple-50 via-white to-pink-50'
-                  : idx === 2
-                  ? 'bg-gradient-to-r from-blue-50 via-pink-50 to-purple-50'
-                  : '';
-              const rowClass = `${topHighlight || rowBase} ${isCutoffFailed ? 'opacity-70' : ''} hover:bg-pink-50 transition`;
-              const expectationBadgeClass =
-                odds > 0 && value >= 150
-                  ? 'bg-gradient-to-r from-yellow-300 via-yellow-200 to-yellow-100 text-yellow-900'
-                  : odds > 0 && value >= 100
-                  ? 'bg-yellow-100 text-yellow-700'
-                  : 'bg-gray-50 text-gray-600';
-              
-              return (
-                <React.Fragment key={horse.horseNum}>
-                  <tr className={rowClass}>
-                    <td className="px-4 py-3 md:py-4 align-middle">
-                      <div className="text-2xl md:text-3xl font-black font-mono text-gray-800 flex items-center gap-1">
-                        {idx + 1}
-                        <span className="text-xs font-bold text-gray-500">位</span>
+                if (deviation !== null && !Number.isNaN(deviation)) {
+                  if (deviation + 1e-6 < cutoff) {
+                    failedFactors.push(factorKey);
+                  }
+                }
+              }
+            });
+
+            const isCutoffFailed = failedFactors.length > 0;
+            const cardExpanded = expandedHorseNum === horse.horseNum;
+            const totalDeviation = factorTotals[horse.horseNum];
+            const averageDeviation = factorAverages[horse.horseNum];
+
+            const baseCardClass = 'rounded-3xl p-4 md:p-5 border-2 transition-all duration-200 cursor-pointer select-none';
+            let visualClass = 'bg-white border-pink-100 hover:border-pink-300 hover:shadow-xl';
+
+            if (isCutoffFailed) {
+              visualClass = 'bg-gray-200 border-gray-300 text-gray-600 opacity-80';
+            } else if (isSuperExpectation) {
+              visualClass = 'bg-gradient-to-r from-yellow-200 via-pink-100 to-yellow-100 border-yellow-400 shadow-[0_0_25px_rgba(255,215,0,0.45)]';
+            } else if (isGoodExpectation && odds > 0) {
+              visualClass = 'bg-gradient-to-r from-yellow-100 via-white to-pink-100 border-yellow-300 shadow-[0_0_18px_rgba(255,235,130,0.35)]';
+            }
+
+            const cardClassName = `${baseCardClass} ${visualClass} ${cardExpanded ? 'ring-2 ring-purple-300 shadow-2xl' : 'hover:-translate-y-1'}`;
+
+            return (
+              <React.Fragment key={horse.horseNum}>
+                <div
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => setExpandedHorseNum(cardExpanded ? null : horse.horseNum)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault();
+                      setExpandedHorseNum(cardExpanded ? null : horse.horseNum);
+                    }
+                  }}
+                  className={cardClassName}
+                >
+                  <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                    <div className="flex items-start gap-3 md:gap-4">
+                      <div className="flex h-12 w-12 items-center justify-center rounded-full bg-white/70 border-2 border-pink-200 shadow-inner">
+                        <span className="text-xl font-black font-mono text-gray-800">{idx + 1}位</span>
                       </div>
-                    </td>
-                    <td className="px-4 py-3 md:py-4 align-middle">
-                      <div className="flex items-center gap-3">
-                        {horseMarks[horse.horseNum] ? (
-                          <span className="px-2 py-1 bg-yellow-200 text-yellow-800 rounded-lg text-xs font-bold border border-yellow-400">
-                            {horseMarks[horse.horseNum]}
-                          </span>
-                        ) : (
-                          <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-gradient-to-br from-pink-100 to-purple-100">
-                            <HorsePixelArt size={16} />
-                          </div>
-                        )}
-                        <div className="min-w-0">
-                          <p className="text-sm md:text-lg font-bold text-gray-800 truncate">
-                            {horse.horseNum}. {horse.name}
-                          </p>
-                          {odds > 0 && (
-                            <p className="text-2xs md:text-xs text-gray-500 font-bold mt-1">
-                              {expectationRanking[horse.horseNum]
-                                ? `期待値順位 ${expectationRanking[horse.horseNum]}位`
-                                : '期待値データ取得中'}
-                            </p>
-                          )}
-                          {isCutoffFailed && (
-                            <div className="mt-2 inline-flex items-center gap-1 rounded-full bg-red-100 px-2 py-1 text-[10px] font-bold text-red-700 border border-red-300">
-                              ⚠️ 基準未達
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          {horseMarks[horse.horseNum] ? (
+                            <span className="px-2 py-1 bg-yellow-200 text-yellow-800 rounded-lg text-xs font-bold border border-yellow-400">
+                              {horseMarks[horse.horseNum]}
+                            </span>
+                          ) : (
+                            <div className="flex h-7 w-7 items-center justify-center rounded-xl bg-gradient-to-br from-pink-100 to-purple-100 border border-pink-200">
+                              <HorsePixelArt size={16} />
                             </div>
                           )}
+                          <p className="text-base md:text-xl font-bold text-gray-800 truncate">
+                            {horse.horseNum}. {horse.name}
+                          </p>
+                          {isAdmin && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setEditingHorseMark(horse.horseNum);
+                                setTempHorseMark(horseMarks[horse.horseNum] || '');
+                              }}
+                              className="ml-auto inline-flex items-center justify-center rounded-full bg-blue-400 px-3 py-1 text-xs font-bold text-white shadow hover:bg-blue-500 transition"
+                            >
+                              ✏️印
+                            </button>
+                          )}
                         </div>
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 md:py-4 align-middle">
-                      <div className="flex items-center gap-3">
-                        <div className="text-2xl md:text-3xl font-black font-mono text-gray-800">
-                          {horse.winRate.toFixed(1)}%
+                        <div className="mt-2 flex flex-wrap items-center gap-2 text-xs font-bold text-gray-600">
+                          <span className="inline-flex items-center gap-1">
+                            <span className="text-pink-500">勝率</span>
+                            <span className="font-mono text-sm text-gray-800">{horse.winRate.toFixed(1)}%</span>
+                          </span>
+                          <span className="inline-flex items-center gap-1">
+                            <span className="text-purple-500">オッズ</span>
+                            <span className="font-mono text-sm">{odds > 0 ? odds.toFixed(1) : '—'}</span>
+                          </span>
+                          <span className="inline-flex items-center gap-1">
+                            <span className="text-amber-500">期待値</span>
+                            <span className="font-mono text-sm">{odds > 0 ? Math.round(value).toString() : '—'}</span>
+                            {expectationRanking[horse.horseNum] && (
+                              <span className="text-[11px] text-gray-500">
+                                ({expectationRanking[horse.horseNum]}位)
+                              </span>
+                            )}
+                          </span>
+                          {isSuperExpectation && (
+                            <span className="inline-flex items-center gap-1 text-xs font-bold text-yellow-700">
+                              <StarPixelArt size={14} /> 超期待値馬
+                            </span>
+                          )}
+                          {!isSuperExpectation && isGoodExpectation && (
+                            <span className="inline-flex items-center gap-1 text-xs font-bold text-yellow-600">
+                              <StarPixelArt size={14} /> 期待値馬
+                            </span>
+                          )}
+                          {isCutoffFailed && (
+                            <span className="inline-flex items-center gap-1 text-xs font-bold text-red-600 bg-red-100 px-2 py-1 rounded-full border border-red-300">
+                              ⚠️ 基準未達
+                            </span>
+                          )}
                         </div>
-                        <div className="flex-1 h-2 rounded-full bg-gray-200 overflow-hidden">
+                        <div className="mt-3 h-2 w-full rounded-full bg-white/60 border border-purple-100 overflow-hidden">
                           <div
-                            className="h-full bg-gradient-to-r from-pink-400 via-purple-400 to-purple-500"
+                            className="h-full bg-gradient-to-r from-pink-400 via-purple-400 to-purple-600"
                             style={{ width: `${Math.min(Math.max(horse.winRate, 0), 100)}%` }}
                           />
                         </div>
                       </div>
-                    </td>
-                    <td className="px-4 py-3 md:py-4 align-middle text-right">
-                      <span className="text-lg font-bold font-mono text-gray-700">
-                        {odds > 0 ? odds.toFixed(1) : '—'}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 md:py-4 align-middle text-right">
-                      <span className={`inline-flex items-center justify-end rounded-full px-3 py-2 text-sm md:text-base font-bold font-mono ${expectationBadgeClass}`}>
-                        {odds > 0 ? Math.round(value).toString() : '—'}
-                      </span>
-                      {(isSuperExpectation || isGoodExpectation) && (
-                        <div className="mt-1 flex items-center justify-end gap-1 text-xs font-bold text-yellow-700">
-                          <StarPixelArt size={14} />
-                          {isSuperExpectation ? '超期待値馬' : '期待値馬'}
-                        </div>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 md:py-4 align-middle">
-                      <div className="space-y-2">
-                        <div className="h-2 rounded-full bg-gray-200 overflow-hidden">
-                          <div
-                            className="h-full bg-gradient-to-r from-purple-300 via-pink-300 to-pink-500"
-                            style={{ width: `${factorStrength}%` }}
-                          />
-                        </div>
-                        <div className="flex items-center justify-between text-[11px] md:text-xs text-gray-600 font-bold">
-                          <span>平均偏差値</span>
-                          <span className="font-mono">
-                            {factorAverage !== null ? factorAverage.toFixed(1) : '—'}
-                          </span>
-                        </div>
-                        {failedFactors.length > 0 && (
-                          <div className="flex flex-wrap gap-1">
-                            {failedFactors.map((factorKey, fIdx) => {
-                              const deviation = allFactorDeviations[factorKey]?.[horse.horseNum];
-                              const cutoff = cutoffDeviations[factorKey];
-                              return (
-                                <span
-                                  key={fIdx}
-                                  className="px-2 py-0.5 rounded-full bg-orange-100 text-orange-700 text-[10px] font-bold border border-orange-300"
-                                  title={`${factorKey}: 偏差値${deviation !== null && deviation !== undefined ? deviation.toFixed(1) : 'N/A'} (基準: ${cutoff}以上)`}
-                                >
-                                  {factorKey}
-                                </span>
-                              );
-                            })}
-                          </div>
-                        )}
+                    </div>
+                    <div className="flex items-center gap-3 md:flex-col md:items-end md:gap-2 text-xs font-bold text-gray-600">
+                      <div className="inline-flex items-center gap-1 bg-white/70 px-3 py-1.5 rounded-full border border-purple-100 text-purple-600">
+                        この馬の詳細はタップで表示
                       </div>
-                    </td>
-                    <td className="px-4 py-3 md:py-4 align-middle text-right">
-                      {isAdmin && (
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setEditingHorseMark(horse.horseNum);
-                            setTempHorseMark(horseMarks[horse.horseNum] || '');
-                          }}
-                          className="inline-flex items-center justify-center rounded-full bg-blue-400 px-3 py-1 text-xs font-bold text-white shadow hover:bg-blue-500 transition"
-                        >
-                          ✏️印
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                  {winRateGaps.includes(idx) && (
-                    <tr>
-                      <td colSpan={7} className="px-4 pb-3">
-                        <div className="flex items-center gap-2 text-xs font-bold text-red-600">
-                          <div className="flex-1 h-px bg-gradient-to-r from-transparent via-red-400 to-transparent" />
-                          断層 ({(resultsWithRate[idx].winRate - resultsWithRate[idx + 1].winRate).toFixed(1)}%差)
-                          <div className="flex-1 h-px bg-gradient-to-r from-transparent via-red-400 to-transparent" />
+                      {failedFactors.length > 0 && (
+                        <div className="flex flex-wrap gap-1 max-w-[240px] md:justify-end">
+                          {failedFactors.map((factorKey, fIdx) => {
+                            const deviation = allFactorDeviations[factorKey]?.[horse.horseNum];
+                            return (
+                              <span
+                                key={fIdx}
+                                className="px-2 py-0.5 bg-orange-100 text-orange-700 rounded-full text-[11px] border border-orange-300"
+                              >
+                                {factorKey}
+                                {deviation !== null && deviation !== undefined && !Number.isNaN(deviation) && (
+                                  <span className="ml-1 font-mono">{deviation.toFixed(1)}</span>
+                                )}
+                              </span>
+                            );
+                          })}
                         </div>
-                      </td>
-                    </tr>
+                      )}
+                    </div>
+                  </div>
+
+                  {cardExpanded && (
+                    <div className="mt-4 rounded-2xl bg-white/80 backdrop-blur px-4 py-4 border border-purple-100 shadow-inner">
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                        <div className="rounded-xl bg-gradient-to-br from-purple-50 to-pink-50 border border-purple-100 px-4 py-3">
+                          <p className="text-xs font-bold text-gray-500 uppercase tracking-widest">合計偏差値</p>
+                          <p className="mt-2 text-lg font-black text-purple-600">
+                            {totalDeviation !== null && totalDeviation !== undefined && !Number.isNaN(totalDeviation)
+                              ? totalDeviation.toFixed(1)
+                              : '—'}
+                            {totalDeviationRanking[horse.horseNum] && (
+                              <span className="ml-2 text-sm font-bold text-gray-500">
+                                {totalDeviationRanking[horse.horseNum]}位
+                              </span>
+                            )}
+                          </p>
+                        </div>
+                        <div className="rounded-xl bg-gradient-to-br from-pink-50 to-white border border-pink-100 px-4 py-3">
+                          <p className="text-xs font-bold text-gray-500 uppercase tracking-widest">平均偏差値</p>
+                          <p className="mt-2 text-lg font-black text-pink-600">
+                            {averageDeviation !== null && averageDeviation !== undefined && !Number.isNaN(averageDeviation)
+                              ? averageDeviation.toFixed(1)
+                              : '—'}
+                            {averageDeviationRanking[horse.horseNum] && (
+                              <span className="ml-2 text-sm font-bold text-gray-500">
+                                {averageDeviationRanking[horse.horseNum]}位
+                              </span>
+                            )}
+                          </p>
+                        </div>
+                        <div className="rounded-xl bg-gradient-to-br from-blue-50 to-white border border-blue-100 px-4 py-3">
+                          <p className="text-xs font-bold text-gray-500 uppercase tracking-widest">データ数</p>
+                          <p className="mt-2 text-lg font-black text-blue-600">
+                            {validFactorCounts[horse.horseNum] || 0}項目
+                          </p>
+                        </div>
+                      </div>
+                      <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                        {factorKeys.map((factorKey) => {
+                          const deviation = allFactorDeviations[factorKey]?.[horse.horseNum];
+                          if (deviation === null || deviation === undefined || Number.isNaN(deviation)) {
+                            return null;
+                          }
+                          const rank = factorRankings[factorKey]?.[horse.horseNum];
+                          return (
+                            <div
+                              key={factorKey}
+                              className="flex items-center justify-between rounded-xl border border-purple-100 bg-white px-3 py-2 shadow-sm"
+                            >
+                              <span className="text-[13px] font-bold text-gray-700">{factorKey}</span>
+                              <span className="flex items-center gap-2">
+                                <span className="font-mono text-sm text-purple-600">{deviation.toFixed(1)}</span>
+                                {rank && <span className="text-[11px] text-gray-500">{rank}位</span>}
+                              </span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
                   )}
-                </React.Fragment>
-              );
-            })}
-              </tbody>
-            </table>
-          </div>
+                </div>
+
+                {winRateGaps.includes(idx) && (
+                  <div className="flex items-center gap-2 text-xs font-bold text-red-600 px-2">
+                    <div className="flex-1 h-px bg-gradient-to-r from-transparent via-red-400 to-transparent" />
+                    断層 ({(resultsWithRate[idx].winRate - resultsWithRate[idx + 1].winRate).toFixed(1)}%差)
+                    <div className="flex-1 h-px bg-gradient-to-r from-transparent via-red-400 to-transparent" />
+                  </div>
+                )}
+              </React.Fragment>
+            );
+          })}
         </div>
 
             {Object.keys(excludedHorses).length > 0 && (
@@ -6971,6 +7005,7 @@ const HorseAnalysisApp = () => {
 };
 
 export default HorseAnalysisApp;
+
 
 
 
